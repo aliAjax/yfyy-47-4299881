@@ -25,6 +25,7 @@ interface TicketState {
   };
   
   addTicket: (ticket: Omit<Ticket, 'id' | 'progressLogs' | 'attachments' | 'urgeRecords' | 'returnRecords' | 'creator' | 'status'>) => void;
+  batchAddTickets: (tickets: Omit<Ticket, 'id' | 'progressLogs' | 'attachments' | 'urgeRecords' | 'returnRecords' | 'creator' | 'status'>[]) => number;
   updateTicketStatus: (ticketId: string, status: TicketStatus) => void;
   addProgressLog: (ticketId: string, content: string, type: ProgressLog['type'], operator: string) => void;
   submitResult: (ticketId: string, result: string, attachments?: Attachment[]) => void;
@@ -152,6 +153,48 @@ export const useTicketStore = create<TicketState>()(
         set((state) => ({
           tickets: [newTicket, ...state.tickets],
         }));
+      },
+
+      batchAddTickets: (ticketsData) => {
+        const now = new Date();
+        const newTickets: Ticket[] = ticketsData.map((ticketData, index) => {
+          const timestamp = Date.now() + index;
+          const ticket: Ticket = {
+            ...ticketData,
+            id: 'GD' + timestamp.toString().slice(-8),
+            status: 'pending',
+            creator: '批量导入',
+            progressLogs: [
+              {
+                id: generateId() + index,
+                ticketId: '',
+                content: '工单已创建（批量导入）',
+                operator: '批量导入',
+                createTime: formatDateTime(now),
+                type: 'create',
+              },
+              {
+                id: generateId() + index + 'a',
+                ticketId: '',
+                content: `工单已分派至${ticketData.handlerUnit}`,
+                operator: '工单调度员',
+                createTime: formatDateTime(now),
+                type: 'assign',
+              },
+            ],
+            attachments: [],
+            urgeRecords: [],
+            returnRecords: [],
+          };
+          ticket.progressLogs.forEach(log => log.ticketId = ticket.id);
+          return ticket;
+        });
+
+        set((state) => ({
+          tickets: [...newTickets, ...state.tickets],
+        }));
+
+        return newTickets.length;
       },
 
       updateTicketStatus: (ticketId, status) => {

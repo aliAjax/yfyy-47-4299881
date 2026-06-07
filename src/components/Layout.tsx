@@ -8,7 +8,8 @@ import {
   X,
   PhoneCall,
   User,
-  ChevronDown
+  ChevronDown,
+  Upload
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { clsx } from 'clsx';
@@ -16,6 +17,7 @@ import { clsx } from 'clsx';
 const navItems = [
   { path: '/', label: '工单列表', icon: FileText },
   { path: '/tickets/new', label: '新建工单', icon: PlusCircle },
+  { path: '/tickets/batch-import', label: '批量导入', icon: Upload },
   { path: '/supervision', label: '督办中心', icon: AlertTriangle },
 ];
 
