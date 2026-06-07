@@ -20,7 +20,7 @@ type TabType = 'risk' | 'urge' | 'return';
 
 export default function Supervision() {
   const navigate = useNavigate();
-  const { getRiskTickets, getUrgeRecords, getReturnRecords, tickets, currentRole } = useTicketStore();
+  const { getRiskTickets, getUrgeRecords, getReturnRecords, tickets } = useTicketStore();
   const [activeTab, setActiveTab] = useState<TabType>('risk');
   
   const riskTickets = getRiskTickets();

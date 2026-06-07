@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -14,12 +14,15 @@ import {
   RotateCcw,
   RefreshCw,
   CheckCircle,
-  FileText
+  FileText,
+  Upload,
+  X
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timeline } from '@/components/Timeline';
-import { getRiskLevel, getDeadlineLabel, generateId, formatDateTime } from '@/utils/date';
+import { getRiskLevel, getDeadlineLabel, generateId, formatDateTime, formatFileSize } from '@/utils/date';
+import { Attachment } from '@/types';
 import { clsx } from 'clsx';
 
 export default function TicketDetail() {
@@ -46,6 +49,9 @@ export default function TicketDetail() {
   const [showUrgeModal, setShowUrgeModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'timeline' | 'attachments'>('timeline');
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!ticket) {
     return (
@@ -77,9 +83,45 @@ export default function TicketDetail() {
 
   const handleSubmitResult = () => {
     if (!resultText.trim()) return;
-    submitResult(ticket.id, resultText);
+    
+    const attachments: Attachment[] = pendingAttachments.map(file => ({
+      id: generateId(),
+      ticketId: ticket.id,
+      name: file.name,
+      size: formatFileSize(file.size),
+      uploadTime: formatDateTime(new Date()),
+    }));
+    
+    submitResult(ticket.id, resultText, attachments);
     setResultText('');
+    setPendingAttachments([]);
     setShowResultForm(false);
+  };
+
+  const handleFileSelect = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+    setPendingAttachments(prev => [...prev, ...fileArray]);
+  };
+
+  const handleRemoveAttachment = (index: number) => {
+    setPendingAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    handleFileSelect(e.dataTransfer.files);
   };
 
   const handleUrge = () => {
@@ -315,10 +357,80 @@ export default function TicketDetail() {
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-all"
                     />
                   </div>
-                  <div className="rounded-lg border-2 border-dashed border-gray-300 p-6 text-center">
-                    <Paperclip className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-                    <p className="text-sm text-gray-500">点击或拖拽上传附件</p>
-                    <p className="text-xs text-gray-400 mt-1">支持 PDF、Word、图片等格式</p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      附件上传
+                    </label>
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      className={clsx(
+                        'rounded-lg border-2 border-dashed p-6 text-center cursor-pointer transition-all',
+                        isDragOver
+                          ? 'border-primary-500 bg-primary-50'
+                          : 'border-gray-300 hover:border-primary-400 hover:bg-gray-50'
+                      )}
+                    >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        onChange={(e) => handleFileSelect(e.target.files)}
+                        className="hidden"
+                      />
+                      <Upload className={clsx(
+                        'mx-auto h-8 w-8 mb-2 transition-colors',
+                        isDragOver ? 'text-primary-500' : 'text-gray-400'
+                      )} />
+                      <p className={clsx(
+                        'text-sm transition-colors',
+                        isDragOver ? 'text-primary-600' : 'text-gray-600'
+                      )}>
+                        点击或拖拽文件到此处上传
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        支持 PDF、Word、图片等格式，单个文件不超过 10MB
+                      </p>
+                    </div>
+                    
+                    {pendingAttachments.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-xs text-gray-500">
+                          已选择 {pendingAttachments.length} 个文件
+                        </p>
+                        {pendingAttachments.map((file, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
+                          >
+                            <div className="flex items-center space-x-3 min-w-0">
+                              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-primary-100 text-primary-600">
+                                <FileText className="h-4 w-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">
+                                  {file.name}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {formatFileSize(file.size)}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveAttachment(index);
+                              }}
+                              className="flex-shrink-0 p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="flex justify-end space-x-3">
                     <button

@@ -19,7 +19,7 @@ export default function TicketList() {
     if (status === 'overdue') {
       setFilterOptions({ deadlineRange: 'overdue' });
     } else {
-      setFilterOptions({ status: status as any });
+      setFilterOptions({ status: status as Ticket['status'] });
     }
   };
 
