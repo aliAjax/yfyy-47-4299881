@@ -25,6 +25,8 @@ import { getRiskLevel, getDeadlineLabel, generateId, formatDateTime, formatFileS
 import { Attachment } from '@/types';
 import { clsx } from 'clsx';
 
+const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
+
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -50,6 +52,7 @@ export default function TicketDetail() {
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'timeline' | 'attachments'>('timeline');
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+  const [attachmentError, setAttachmentError] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -95,13 +98,29 @@ export default function TicketDetail() {
     submitResult(ticket.id, resultText, attachments);
     setResultText('');
     setPendingAttachments([]);
+    setAttachmentError('');
     setShowResultForm(false);
   };
 
   const handleFileSelect = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const fileArray = Array.from(files);
-    setPendingAttachments(prev => [...prev, ...fileArray]);
+    const validFiles = fileArray.filter(file => file.size <= MAX_ATTACHMENT_SIZE);
+    const oversizedFiles = fileArray.filter(file => file.size > MAX_ATTACHMENT_SIZE);
+
+    if (validFiles.length > 0) {
+      setPendingAttachments(prev => [...prev, ...validFiles]);
+    }
+
+    setAttachmentError(
+      oversizedFiles.length > 0
+        ? `${oversizedFiles.map(file => file.name).join('、')} 超过10MB，未添加到附件列表`
+        : ''
+    );
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleRemoveAttachment = (index: number) => {
@@ -430,6 +449,12 @@ export default function TicketDetail() {
                           </div>
                         ))}
                       </div>
+                    )}
+
+                    {attachmentError && (
+                      <p className="mt-2 text-xs text-red-500">
+                        {attachmentError}
+                      </p>
                     )}
                   </div>
                   <div className="flex justify-end space-x-3">
