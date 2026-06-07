@@ -14,7 +14,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
-import { parseCsv, generateSampleCsv, CsvParseResult, CsvRow, getErrorSummary } from '@/utils/csvParser';
+import { parseCsv, generateSampleCsv, CsvParseResult } from '@/utils/csvParser';
 import { TicketCategory, Area, HandlerUnit, CATEGORIES, AREAS, HANDLER_UNITS } from '@/types';
 import { formatDate, addDays } from '@/utils/date';
 import { clsx } from 'clsx';
