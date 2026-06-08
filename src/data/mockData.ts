@@ -168,17 +168,71 @@ function createMockTicket(
 }
 
 export const mockTickets: Ticket[] = [
-  createMockTicket(
-    'GD20240001',
-    '关于东城区某街道路灯损坏的投诉',
-    '城市管理',
-    '东城区',
-    '东城区建国门街道附近有多处路灯损坏，夜间出行不便，存在安全隐患。希望相关部门尽快维修。',
-    '城市管理委员会',
-    'processing',
-    2,
-    7
-  ),
+  (() => {
+    const ticket = createMockTicket(
+      'GD20240001',
+      '关于东城区某街道路灯损坏的投诉',
+      '城市管理',
+      '东城区',
+      '东城区建国门街道附近有多处路灯损坏，夜间出行不便，存在安全隐患。希望相关部门尽快维修。',
+      '城市管理委员会',
+      'collaborating',
+      2,
+      7
+    );
+    ticket.collaborationRecords = [
+      {
+        id: generateId(),
+        ticketId: ticket.id,
+        unit: '交通委员会',
+        description: '请协助核查该路段临时交通疏导和施工占道情况。',
+        progress: '已安排属地交通执法人员现场核查，预计今日反馈。',
+        status: 'processing',
+        requestedBy: '城市管理委员会经办人',
+        requestedAt: formatDate(addDays(now, -1)) + ' 10:30',
+        updatedAt: formatDate(addDays(now, -1)) + ' 15:20',
+      },
+      {
+        id: generateId(),
+        ticketId: ticket.id,
+        unit: '住房和城乡建设委员会',
+        description: '请确认周边施工单位是否涉及路灯线缆迁改。',
+        progress: '已确认周边施工单位未涉及该处线缆迁改。',
+        status: 'completed',
+        requestedBy: '城市管理委员会经办人',
+        requestedAt: formatDate(addDays(now, -1)) + ' 10:30',
+        updatedAt: formatDate(addDays(now, -1)) + ' 16:10',
+        completedAt: formatDate(addDays(now, -1)) + ' 16:10',
+      },
+    ];
+    ticket.progressLogs.push(
+      {
+        id: generateId(),
+        ticketId: ticket.id,
+        content: '【发起协办】交通委员会、住房和城乡建设委员会：请协助核查道路施工和交通疏导情况',
+        operator: '城市管理委员会经办人',
+        createTime: formatDate(addDays(now, -1)) + ' 10:30',
+        type: 'collaboration',
+      },
+      {
+        id: generateId(),
+        ticketId: ticket.id,
+        content: '【协办进度】交通委员会：已安排属地交通执法人员现场核查，预计今日反馈。',
+        operator: '交通委员会经办人',
+        createTime: formatDate(addDays(now, -1)) + ' 15:20',
+        type: 'collaboration',
+      },
+      {
+        id: generateId(),
+        ticketId: ticket.id,
+        content: '【协办完成】住房和城乡建设委员会：已确认周边施工单位未涉及该处线缆迁改。',
+        operator: '住房和城乡建设委员会经办人',
+        createTime: formatDate(addDays(now, -1)) + ' 16:10',
+        type: 'collaboration',
+      }
+    );
+    return ticket;
+  })(),
   createMockTicket(
     'GD20240002',
     '公交车站候车亭破损问题',

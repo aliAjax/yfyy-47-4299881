@@ -8,9 +8,11 @@ import {
   UrgeRecord,
   ReturnRecord,
   Attachment,
+  HandlerUnit,
   DispatchInfo,
   ArchiveFilterOptions,
   ArchiveReview,
+  CollaborationRecord,
   SATISFACTION_LABELS,
   COMPLETION_QUALITY_LABELS,
 } from '@/types';
@@ -46,6 +48,9 @@ interface TicketState {
   batchAddTickets: (tickets: Omit<Ticket, 'id' | 'progressLogs' | 'attachments' | 'urgeRecords' | 'returnRecords' | 'creator' | 'status'>[]) => number;
   updateTicketStatus: (ticketId: string, status: TicketStatus) => void;
   addProgressLog: (ticketId: string, content: string, type: ProgressLog['type'], operator: string) => void;
+  requestCollaboration: (ticketId: string, units: HandlerUnit[], description: string, operator: string) => void;
+  updateCollaborationProgress: (ticketId: string, recordId: string, progress: string, operator: string) => void;
+  completeCollaboration: (ticketId: string, recordId: string, progress: string, operator: string) => void;
   submitResult: (ticketId: string, result: string, attachments?: Attachment[]) => void;
   archiveTicket: (ticketId: string, review: Omit<ArchiveReview, 'id' | 'ticketId' | 'archivedBy' | 'archiveTime'>, operator: string) => void;
   getArchivedTickets: () => Ticket[];
@@ -130,6 +135,25 @@ function getHolidayDatesSafe(): { holidayDates: string[]; workdayDates: string[]
   return { holidayDates: [], workdayDates: [] };
 }
 
+function getCollaborationRecords(ticket: Ticket): CollaborationRecord[] {
+  return ticket.collaborationRecords || [];
+}
+
+function isCollaboratingTicket(ticket: Ticket) {
+  return getCollaborationRecords(ticket).some(record => record.status !== 'completed');
+}
+
+function isUnitRelated(ticket: Ticket, unit: string) {
+  return ticket.handlerUnit === unit || getCollaborationRecords(ticket).some(record => record.unit === unit);
+}
+
+function getVisibleStatus(ticket: Ticket): TicketStatus {
+  if (ticket.status === 'completed' || ticket.status === 'archived' || ticket.status === 'returned') {
+    return ticket.status;
+  }
+  return isCollaboratingTicket(ticket) ? 'collaborating' : ticket.status;
+}
+
 export const useTicketStore = create<TicketState>()(
   persist(
     (set, get) => ({
@@ -163,17 +187,17 @@ export const useTicketStore = create<TicketState>()(
         let filtered = [...tickets];
 
         if (currentRole === 'handler' && currentUnit) {
-          filtered = filtered.filter(t => t.handlerUnit === currentUnit);
+          filtered = filtered.filter(t => isUnitRelated(t, currentUnit));
         }
 
         if (filterOptions.status) {
-          filtered = filtered.filter(t => t.status === filterOptions.status);
+          filtered = filtered.filter(t => getVisibleStatus(t) === filterOptions.status);
         }
         if (filterOptions.area) {
           filtered = filtered.filter(t => t.area === filterOptions.area);
         }
         if (filterOptions.handlerUnit) {
-          filtered = filtered.filter(t => t.handlerUnit === filterOptions.handlerUnit);
+          filtered = filtered.filter(t => isUnitRelated(t, filterOptions.handlerUnit));
         }
         if (filterOptions.category) {
           filtered = filtered.filter(t => t.category === filterOptions.category);
@@ -201,14 +225,14 @@ export const useTicketStore = create<TicketState>()(
         const { tickets, currentRole, currentUnit } = get();
         let list = tickets;
         if (currentRole === 'handler' && currentUnit) {
-          list = list.filter(t => t.handlerUnit === currentUnit);
+          list = list.filter(t => isUnitRelated(t, currentUnit));
         }
 
         const { holidayDates, workdayDates } = getHolidayDatesSafe();
 
         return {
-          pending: list.filter(t => t.status === 'pending').length,
-          processing: list.filter(t => t.status === 'processing').length,
+          pending: list.filter(t => getVisibleStatus(t) === 'pending').length,
+          processing: list.filter(t => getVisibleStatus(t) === 'processing' || getVisibleStatus(t) === 'collaborating').length,
           completed: list.filter(t => t.status === 'completed').length,
           overdue: list.filter(t => {
             if (t.status === 'overdue') return true;
@@ -247,6 +271,7 @@ export const useTicketStore = create<TicketState>()(
           attachments: [],
           urgeRecords: [],
           returnRecords: [],
+          collaborationRecords: [],
         };
         newTicket.progressLogs.forEach(log => log.ticketId = newTicket.id);
 
@@ -285,6 +310,7 @@ export const useTicketStore = create<TicketState>()(
             attachments: [],
             urgeRecords: [],
             returnRecords: [],
+            collaborationRecords: [],
           };
           ticket.progressLogs.forEach(log => log.ticketId = ticket.id);
           return ticket;
@@ -320,6 +346,120 @@ export const useTicketStore = create<TicketState>()(
               ? { ...t, progressLogs: [...t.progressLogs, newLog] }
               : t
           ),
+        }));
+      },
+
+      requestCollaboration: (ticketId, units, description, operator) => {
+        const now = formatDateTime(new Date());
+        const uniqueUnits = Array.from(new Set(units)).filter(Boolean);
+        if (uniqueUnits.length === 0 || !description.trim()) return;
+
+        set((state) => ({
+          tickets: state.tickets.map(t => {
+            if (t.id !== ticketId) return t;
+
+            const existingUnits = new Set(getCollaborationRecords(t).map(record => record.unit));
+            const newRecords: CollaborationRecord[] = uniqueUnits
+              .filter(unit => unit !== t.handlerUnit && !existingUnits.has(unit))
+              .map(unit => ({
+                id: generateId(),
+                ticketId,
+                unit,
+                description,
+                progress: '',
+                status: 'pending',
+                requestedBy: operator,
+                requestedAt: now,
+              }));
+
+            if (newRecords.length === 0) return t;
+
+            const collaborationLog: ProgressLog = {
+              id: generateId(),
+              ticketId,
+              content: `【发起协办】${newRecords.map(record => record.unit).join('、')}：${description}`,
+              operator,
+              createTime: now,
+              type: 'collaboration',
+            };
+
+            return {
+              ...t,
+              status: t.status === 'pending' || t.status === 'processing' ? 'collaborating' : t.status,
+              collaborationRecords: [...getCollaborationRecords(t), ...newRecords],
+              progressLogs: [...t.progressLogs, collaborationLog],
+            };
+          }),
+        }));
+      },
+
+      updateCollaborationProgress: (ticketId, recordId, progress, operator) => {
+        if (!progress.trim()) return;
+        const now = formatDateTime(new Date());
+        const progressLog: ProgressLog = {
+          id: generateId(),
+          ticketId,
+          content: `【协办进度】${progress}`,
+          operator,
+          createTime: now,
+          type: 'collaboration',
+        };
+
+        set((state) => ({
+          tickets: state.tickets.map(t =>
+            t.id === ticketId
+              ? {
+                  ...t,
+                  status: t.status === 'pending' || t.status === 'processing' ? 'collaborating' : t.status,
+                  collaborationRecords: getCollaborationRecords(t).map(record =>
+                    record.id === recordId
+                      ? {
+                          ...record,
+                          progress,
+                          status: 'processing',
+                          updatedAt: now,
+                        }
+                      : record
+                  ),
+                  progressLogs: [...t.progressLogs, progressLog],
+                }
+              : t
+          ),
+        }));
+      },
+
+      completeCollaboration: (ticketId, recordId, progress, operator) => {
+        if (!progress.trim()) return;
+        const now = formatDateTime(new Date());
+
+        set((state) => ({
+          tickets: state.tickets.map(t => {
+            if (t.id !== ticketId) return t;
+            const targetRecord = getCollaborationRecords(t).find(record => record.id === recordId);
+            const completeLog: ProgressLog = {
+              id: generateId(),
+              ticketId,
+              content: `【协办完成】${targetRecord?.unit || '协办单位'}：${progress}`,
+              operator,
+              createTime: now,
+              type: 'collaboration',
+            };
+            return {
+              ...t,
+              collaborationRecords: getCollaborationRecords(t).map(record =>
+                record.id === recordId
+                  ? {
+                      ...record,
+                      progress,
+                      status: 'completed',
+                      updatedAt: now,
+                      completedAt: now,
+                    }
+                  : record
+              ),
+              progressLogs: [...t.progressLogs, completeLog],
+            };
+          }),
         }));
       },
 
@@ -385,10 +525,10 @@ export const useTicketStore = create<TicketState>()(
         let archived = tickets.filter(t => t.status === 'archived' && t.archiveInfo);
 
         if (currentRole === 'handler' && currentUnit) {
-          archived = archived.filter(t => t.handlerUnit === currentUnit);
+          archived = archived.filter(t => isUnitRelated(t, currentUnit));
         }
         if (archiveFilterOptions.handlerUnit) {
-          archived = archived.filter(t => t.handlerUnit === archiveFilterOptions.handlerUnit);
+          archived = archived.filter(t => isUnitRelated(t, archiveFilterOptions.handlerUnit));
         }
         if (archiveFilterOptions.category) {
           archived = archived.filter(t => t.category === archiveFilterOptions.category);
@@ -472,7 +612,7 @@ export const useTicketStore = create<TicketState>()(
         const { tickets, currentRole, currentUnit } = get();
         let list = tickets.filter(t => t.status !== 'completed' && t.status !== 'archived');
         if (currentRole === 'handler' && currentUnit) {
-          list = list.filter(t => t.handlerUnit === currentUnit);
+          list = list.filter(t => isUnitRelated(t, currentUnit));
         }
 
         const { holidayDates, workdayDates } = getHolidayDatesSafe();
@@ -514,7 +654,7 @@ export const useTicketStore = create<TicketState>()(
 
       getHandlerTodoStats: () => {
         const { tickets, currentUnit } = get();
-        const list = tickets.filter(t => t.handlerUnit === currentUnit);
+        const list = tickets.filter(t => isUnitRelated(t, currentUnit));
 
         const { holidayDates, workdayDates } = getHolidayDatesSafe();
 
@@ -525,8 +665,8 @@ export const useTicketStore = create<TicketState>()(
         }).length;
 
         return {
-          pending: list.filter(t => t.status === 'pending').length,
-          processing: list.filter(t => t.status === 'processing').length,
+          pending: list.filter(t => getVisibleStatus(t) === 'pending').length,
+          processing: list.filter(t => getVisibleStatus(t) === 'processing' || getVisibleStatus(t) === 'collaborating').length,
           returned: list.filter(t => t.status === 'returned').length,
           upcomingDeadline,
         };
@@ -534,7 +674,7 @@ export const useTicketStore = create<TicketState>()(
 
       getHandlerTodoTickets: (type) => {
         const { tickets, currentUnit } = get();
-        const list = tickets.filter(t => t.handlerUnit === currentUnit);
+        const list = tickets.filter(t => isUnitRelated(t, currentUnit));
 
         const { holidayDates, workdayDates } = getHolidayDatesSafe();
 
@@ -543,7 +683,7 @@ export const useTicketStore = create<TicketState>()(
             return list.filter(t => t.status === 'pending')
               .sort((a, b) => new Date(b.assignTime).getTime() - new Date(a.assignTime).getTime());
           case 'processing':
-            return list.filter(t => t.status === 'processing')
+            return list.filter(t => getVisibleStatus(t) === 'processing' || getVisibleStatus(t) === 'collaborating')
               .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
           case 'returned':
             return list.filter(t => t.status === 'returned')

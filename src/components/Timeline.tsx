@@ -6,6 +6,7 @@ import {
   CheckCircle2, 
   AlertTriangle, 
   RotateCcw,
+  Users,
   Archive
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -21,6 +22,7 @@ const iconMap = {
   complete: CheckCircle2,
   urge: AlertTriangle,
   return: RotateCcw,
+  collaboration: Users,
   archive: Archive,
 };
 
@@ -31,6 +33,7 @@ const colorMap = {
   complete: 'bg-green-500',
   urge: 'bg-red-500',
   return: 'bg-orange-500',
+  collaboration: 'bg-cyan-500',
   archive: 'bg-gray-500',
 };
 
@@ -67,9 +70,10 @@ export function Timeline({ logs }: TimelineProps) {
                     'text-sm font-medium',
                     log.type === 'urge' && 'text-red-700',
                     log.type === 'return' && 'text-orange-700',
+                    log.type === 'collaboration' && 'text-cyan-700',
                     log.type === 'complete' && 'text-green-700',
                     log.type === 'archive' && 'text-gray-700',
-                    !['urge', 'return', 'complete', 'archive'].includes(log.type) && 'text-gray-900'
+                    !['urge', 'return', 'collaboration', 'complete', 'archive'].includes(log.type) && 'text-gray-900'
                   )}>
                     {log.content}
                   </p>

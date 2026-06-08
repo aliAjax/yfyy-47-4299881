@@ -1,4 +1,4 @@
-export type TicketStatus = 'pending' | 'processing' | 'completed' | 'overdue' | 'returned' | 'archived';
+export type TicketStatus = 'pending' | 'processing' | 'collaborating' | 'completed' | 'overdue' | 'returned' | 'archived';
 
 export type TicketCategory = 
   | '城市管理' 
@@ -37,6 +37,7 @@ export type ProgressLogType =
   | 'complete' 
   | 'urge' 
   | 'return' 
+  | 'collaboration'
   | 'archive';
 
 export interface ProgressLog {
@@ -72,6 +73,21 @@ export interface ReturnRecord {
   createTime: string;
 }
 
+export type CollaborationStatus = 'pending' | 'processing' | 'completed';
+
+export interface CollaborationRecord {
+  id: string;
+  ticketId: string;
+  unit: HandlerUnit;
+  description: string;
+  progress: string;
+  status: CollaborationStatus;
+  requestedBy: string;
+  requestedAt: string;
+  updatedAt?: string;
+  completedAt?: string;
+}
+
 export type SatisfactionLevel = 'satisfied' | 'neutral' | 'unsatisfied';
 
 export type CompletionQuality = 'excellent' | 'qualified' | 'poor';
@@ -104,6 +120,7 @@ export interface Ticket {
   attachments: Attachment[];
   urgeRecords: UrgeRecord[];
   returnRecords: ReturnRecord[];
+  collaborationRecords?: CollaborationRecord[];
   archiveInfo?: ArchiveReview;
   dispatchInfo?: DispatchInfo;
 }
@@ -145,6 +162,7 @@ export type RiskLevel = 'high' | 'medium' | 'low';
 export const STATUS_LABELS: Record<TicketStatus, string> = {
   pending: '待办理',
   processing: '办理中',
+  collaborating: '协办中',
   completed: '已办结',
   overdue: '已超期',
   returned: '已退回',

@@ -22,7 +22,8 @@ import {
   BookOpen,
   Sparkles,
   Archive,
-  Star
+  Star,
+  Users
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { useContactStore } from '@/store/useContactStore';
@@ -38,6 +39,7 @@ import {
   HandlerUnit,
   KnowledgeMatchResult,
   SATISFACTION_LABELS,
+  HANDLER_UNITS,
 } from '@/types';
 import { getMatchReasonText } from '@/utils/dispatchRule';
 import { getKnowledgeMatchReasonText } from '@/utils/knowledgeBase';
@@ -53,6 +55,10 @@ export default function TicketDetail() {
     currentRole, 
     addProgressLog, 
     updateTicketStatus,
+    currentUnit,
+    requestCollaboration,
+    updateCollaborationProgress,
+    completeCollaboration,
     submitResult,
     urgeTicket,
     returnTicket,
@@ -73,7 +79,11 @@ export default function TicketDetail() {
   const [showUrgeModal, setShowUrgeModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [showCollaborationForm, setShowCollaborationForm] = useState(false);
   const [activeTab, setActiveTab] = useState<'timeline' | 'attachments'>('timeline');
+  const [selectedCollaborationUnits, setSelectedCollaborationUnits] = useState<HandlerUnit[]>([]);
+  const [collaborationDescription, setCollaborationDescription] = useState('');
+  const [collaborationProgressText, setCollaborationProgressText] = useState<Record<string, string>>({});
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
   const [attachmentError, setAttachmentError] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
@@ -109,15 +119,55 @@ export default function TicketDetail() {
 
   const riskLevel = getRiskLevel(ticket.deadline, ticket.status);
   const deadlineLabel = getDeadlineLabel(ticket.deadline, ticket.status);
+  const collaborationRecords = ticket.collaborationRecords || [];
+  const pendingCollaborations = collaborationRecords.filter(record => record.status !== 'completed');
+  const completedCollaborations = collaborationRecords.filter(record => record.status === 'completed');
+  const isPrimaryHandler = currentRole === 'handler' && (!currentUnit || ticket.handlerUnit === currentUnit);
+  const myCollaborationRecords = currentRole === 'handler' && currentUnit
+    ? collaborationRecords.filter(record => record.unit === currentUnit)
+    : [];
+  const canWorkAsCollaborator = myCollaborationRecords.some(record => record.status !== 'completed');
+  const canPrimaryHandle = currentRole === 'handler' && isPrimaryHandler;
+  const availableCollaborationUnits = HANDLER_UNITS.filter(unit =>
+    unit !== ticket.handlerUnit && !collaborationRecords.some(record => record.unit === unit)
+  );
 
   const handleAddProgress = () => {
     if (!progressText.trim()) return;
-    addProgressLog(ticket.id, progressText, 'progress', '承办单位经办人');
+    addProgressLog(ticket.id, progressText, 'progress', `${ticket.handlerUnit}经办人`);
     if (ticket.status === 'pending' || ticket.status === 'returned') {
       updateTicketStatus(ticket.id, 'processing');
     }
     setProgressText('');
     setShowProgressForm(false);
+  };
+
+  const handleToggleCollaborationUnit = (unit: HandlerUnit) => {
+    setSelectedCollaborationUnits(prev =>
+      prev.includes(unit) ? prev.filter(item => item !== unit) : [...prev, unit]
+    );
+  };
+
+  const handleRequestCollaboration = () => {
+    if (selectedCollaborationUnits.length === 0 || !collaborationDescription.trim()) return;
+    requestCollaboration(ticket.id, selectedCollaborationUnits, collaborationDescription, `${ticket.handlerUnit}经办人`);
+    setSelectedCollaborationUnits([]);
+    setCollaborationDescription('');
+    setShowCollaborationForm(false);
+  };
+
+  const handleUpdateCollaboration = (recordId: string) => {
+    const progress = collaborationProgressText[recordId] || '';
+    if (!progress.trim()) return;
+    updateCollaborationProgress(ticket.id, recordId, progress, `${currentUnit || '协办单位'}经办人`);
+    setCollaborationProgressText(prev => ({ ...prev, [recordId]: '' }));
+  };
+
+  const handleCompleteCollaboration = (recordId: string) => {
+    const progress = collaborationProgressText[recordId] || '';
+    if (!progress.trim()) return;
+    completeCollaboration(ticket.id, recordId, progress, `${currentUnit || '协办单位'}经办人`);
+    setCollaborationProgressText(prev => ({ ...prev, [recordId]: '' }));
   };
 
   const handleSubmitResult = () => {
@@ -295,11 +345,11 @@ export default function TicketDetail() {
                 
                 <div className="flex items-start space-x-3">
                   <Building2 className="h-5 w-5 text-gray-400 mt-0.5" />
-                  <div>
-                    <p className="text-xs text-gray-500">承办单位</p>
-                    <p className="mt-0.5 text-sm font-medium text-gray-900">{ticket.handlerUnit}</p>
-                  </div>
+                <div>
+                  <p className="text-xs text-gray-500">承办单位</p>
+                  <p className="mt-0.5 text-sm font-medium text-gray-900">{ticket.handlerUnit}</p>
                 </div>
+              </div>
                 
                 <div className="flex items-start space-x-3">
                   <User className="h-5 w-5 text-gray-400 mt-0.5" />
@@ -327,6 +377,37 @@ export default function TicketDetail() {
                   </div>
                 </div>
               </div>
+
+              {collaborationRecords.length > 0 && (
+                <div className="mt-6 rounded-lg border border-cyan-200 bg-cyan-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="flex items-center text-sm font-medium text-cyan-900">
+                      <Users className="mr-2 h-4 w-4 text-cyan-600" />
+                      协办完成情况
+                    </h3>
+                    <span className="text-xs font-medium text-cyan-700">
+                      {completedCollaborations.length}/{collaborationRecords.length} 已完成
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {collaborationRecords.map(record => (
+                      <span
+                        key={record.id}
+                        className={clsx(
+                          'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium',
+                          record.status === 'completed'
+                            ? 'border-green-200 bg-green-50 text-green-700'
+                            : record.status === 'processing'
+                              ? 'border-blue-200 bg-blue-50 text-blue-700'
+                              : 'border-yellow-200 bg-yellow-50 text-yellow-700'
+                        )}
+                      >
+                        {record.unit} · {record.status === 'completed' ? '已完成' : record.status === 'processing' ? '处理中' : '待响应'}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Risk Badge */}
               {!isClosedTicket && (
@@ -395,8 +476,141 @@ export default function TicketDetail() {
             </div>
           </div>
 
+          {/* Collaboration Area */}
+          {!isClosedTicket && (currentRole === 'supervisor' || currentRole === 'handler') && (
+            <div className="rounded-xl border border-cyan-200 bg-white p-6 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="flex items-center text-base font-semibold text-gray-900">
+                    <Users className="mr-2 h-5 w-5 text-cyan-600" />
+                    协同办理
+                  </h3>
+                  <p className="mt-1 text-xs text-gray-500">主办单位发起协办，协办单位更新自己的办理进度</p>
+                </div>
+                {canPrimaryHandle && availableCollaborationUnits.length > 0 && (
+                  <button
+                    onClick={() => setShowCollaborationForm(!showCollaborationForm)}
+                    className="rounded-lg bg-cyan-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-700"
+                  >
+                    发起协办
+                  </button>
+                )}
+              </div>
+
+              {showCollaborationForm && canPrimaryHandle && (
+                <div className="mb-5 rounded-lg border border-cyan-100 bg-cyan-50/60 p-4">
+                  <label className="mb-2 block text-sm font-medium text-gray-700">协办单位</label>
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    {availableCollaborationUnits.map(unit => (
+                      <button
+                        key={unit}
+                        type="button"
+                        onClick={() => handleToggleCollaborationUnit(unit)}
+                        className={clsx(
+                          'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                          selectedCollaborationUnits.includes(unit)
+                            ? 'border-cyan-500 bg-cyan-600 text-white'
+                            : 'border-gray-200 bg-white text-gray-600 hover:border-cyan-300'
+                        )}
+                      >
+                        {unit}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">协办说明</label>
+                  <textarea
+                    value={collaborationDescription}
+                    onChange={(e) => setCollaborationDescription(e.target.value)}
+                    rows={3}
+                    placeholder="请说明需要协办单位配合处理的事项..."
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                  />
+                  <div className="mt-3 flex justify-end gap-3">
+                    <button
+                      onClick={() => setShowCollaborationForm(false)}
+                      className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleRequestCollaboration}
+                      className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={selectedCollaborationUnits.length === 0 || !collaborationDescription.trim()}
+                    >
+                      提交协办
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {collaborationRecords.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-200 py-8 text-center">
+                  <Users className="mx-auto mb-2 h-10 w-10 text-gray-300" />
+                  <p className="text-sm text-gray-500">暂无协办记录</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {collaborationRecords.map(record => {
+                    const canEditRecord = currentRole === 'handler' && currentUnit === record.unit && record.status !== 'completed';
+                    return (
+                      <div key={record.id} className="rounded-lg border border-gray-200 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-gray-900">{record.unit}</span>
+                              <span className={clsx(
+                                'rounded-full px-2 py-0.5 text-xs font-medium',
+                                record.status === 'completed'
+                                  ? 'bg-green-100 text-green-700'
+                                  : record.status === 'processing'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-yellow-100 text-yellow-700'
+                              )}>
+                                {record.status === 'completed' ? '已完成' : record.status === 'processing' ? '处理中' : '待响应'}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-sm text-gray-600">{record.description}</p>
+                            {record.progress && (
+                              <p className="mt-2 rounded-lg bg-gray-50 p-3 text-sm text-gray-700">{record.progress}</p>
+                            )}
+                          </div>
+                          <span className="flex-shrink-0 text-xs text-gray-400">{record.completedAt || record.updatedAt || record.requestedAt}</span>
+                        </div>
+                        {canEditRecord && (
+                          <div className="mt-4 space-y-3">
+                            <textarea
+                              value={collaborationProgressText[record.id] || ''}
+                              onChange={(e) => setCollaborationProgressText(prev => ({ ...prev, [record.id]: e.target.value }))}
+                              rows={3}
+                              placeholder="填写本单位协办进度或完成说明..."
+                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                            />
+                            <div className="flex justify-end gap-3">
+                              <button
+                                onClick={() => handleUpdateCollaboration(record.id)}
+                                className="rounded-lg border border-cyan-300 bg-white px-4 py-2 text-sm font-medium text-cyan-700 hover:bg-cyan-50"
+                              >
+                                更新协办进度
+                              </button>
+                              <button
+                                onClick={() => handleCompleteCollaboration(record.id)}
+                                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+                              >
+                                标记协办完成
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Handler Actions */}
-          {currentRole === 'handler' && !isClosedTicket && (
+          {canPrimaryHandle && !isClosedTicket && (
             <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-6">
               <h3 className="text-base font-semibold text-gray-900 mb-4">办理操作</h3>
               
@@ -466,6 +680,34 @@ export default function TicketDetail() {
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-all"
                     />
                   </div>
+                  {collaborationRecords.length > 0 && (
+                    <div className="rounded-lg border border-cyan-200 bg-cyan-50 p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-sm font-medium text-cyan-900">协办完成情况</span>
+                        <span className={clsx(
+                          'rounded-full px-2.5 py-1 text-xs font-medium',
+                          pendingCollaborations.length === 0
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                        )}>
+                          {completedCollaborations.length}/{collaborationRecords.length} 已完成
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {collaborationRecords.map(record => (
+                          <div key={record.id} className="rounded-lg bg-white p-3 text-sm">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-gray-900">{record.unit}</span>
+                              <span className="text-xs text-gray-500">
+                                {record.status === 'completed' ? '已完成' : record.status === 'processing' ? '处理中' : '待响应'}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-gray-600">{record.progress || record.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
                     <div className="mb-3 flex items-center justify-between">
                       <div className="flex items-center space-x-2">

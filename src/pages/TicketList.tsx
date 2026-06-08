@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Clock, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles } from 'lucide-react';
+import { Clock, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles, Users } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { StatsCard } from '@/components/StatsCard';
 import { FilterBar } from '@/components/FilterBar';
@@ -10,7 +10,7 @@ import { clsx } from 'clsx';
 
 export default function TicketList() {
   const navigate = useNavigate();
-  const { getFilteredTickets, getTicketStats, setFilterOptions } = useTicketStore();
+  const { getFilteredTickets, getTicketStats, setFilterOptions, currentRole, currentUnit } = useTicketStore();
   const { getDeadlineLabel, getRiskLevel } = useWorkday();
   
   const tickets = getFilteredTickets();
@@ -30,6 +30,13 @@ export default function TicketList() {
     if (risk === 'high') return 'text-red-600 font-medium';
     if (risk === 'medium') return 'text-orange-600';
     return 'text-gray-600';
+  };
+
+  const getRoleLabel = (ticket: Ticket) => {
+    if (currentRole !== 'handler' || !currentUnit) return '';
+    if (ticket.handlerUnit === currentUnit) return '主办';
+    if ((ticket.collaborationRecords || []).some(record => record.unit === currentUnit)) return '协办';
+    return '';
   };
 
   return (
@@ -88,7 +95,7 @@ export default function TicketList() {
                   所属区域
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  承办单位
+                  办理单位
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                   交办时间
@@ -137,6 +144,15 @@ export default function TicketList() {
                             <span>{ticket.dispatchInfo.dispatchMethod === 'auto' ? '智能' : '推荐'}</span>
                           </span>
                         )}
+                        {(ticket.collaborationRecords || []).some(record => record.status !== 'completed') && (
+                          <span
+                            className="inline-flex items-center space-x-0.5 rounded bg-cyan-50 px-1.5 py-0.5 text-xs font-medium text-cyan-700"
+                            title="存在未完成协办"
+                          >
+                            <Users className="h-3 w-3" />
+                            <span>协办中</span>
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-4">
@@ -148,7 +164,21 @@ export default function TicketList() {
                       <span className="text-sm text-gray-600">{ticket.area}</span>
                     </td>
                     <td className="px-4 py-4">
-                      <span className="text-sm text-gray-600">{ticket.handlerUnit}</span>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm text-gray-700">{ticket.handlerUnit}</span>
+                          {getRoleLabel(ticket) && (
+                            <span className="rounded bg-primary-50 px-1.5 py-0.5 text-xs font-medium text-primary-700">
+                              {getRoleLabel(ticket)}
+                            </span>
+                          )}
+                        </div>
+                        {(ticket.collaborationRecords || []).length > 0 && (
+                          <p className="text-xs text-cyan-700">
+                            协办：{(ticket.collaborationRecords || []).map(record => record.unit).join('、')}
+                          </p>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-4">
                       <span className="text-sm text-gray-600">{ticket.assignTime}</span>

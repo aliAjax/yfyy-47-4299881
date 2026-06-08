@@ -20,6 +20,7 @@ import {
   Archive
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
+import { HANDLER_UNITS } from '@/types';
 import { clsx } from 'clsx';
 
 const navItems = [
@@ -144,9 +145,20 @@ export function Layout() {
               </button>
             </div>
             {currentRole === 'handler' && currentUnit && (
-              <p className="mt-3 text-xs text-primary-200">
-                当前单位：{currentUnit}
-              </p>
+              <div className="mt-3">
+                <label className="mb-1 block text-xs font-medium text-primary-200">当前单位</label>
+                <select
+                  value={currentUnit}
+                  onChange={(e) => setCurrentUnit(e.target.value)}
+                  className="w-full rounded-lg border border-white/20 bg-white/10 px-2 py-1.5 text-xs text-white outline-none transition-colors focus:border-white/50"
+                >
+                  {HANDLER_UNITS.map(unit => (
+                    <option key={unit} value={unit} className="text-gray-900">
+                      {unit}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
         )}
