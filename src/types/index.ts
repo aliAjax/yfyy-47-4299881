@@ -89,6 +89,24 @@ export interface Ticket {
   attachments: Attachment[];
   urgeRecords: UrgeRecord[];
   returnRecords: ReturnRecord[];
+  dispatchInfo?: DispatchInfo;
+}
+
+export interface DispatchInfo {
+  matchedRules: {
+    ruleId: string;
+    ruleName: string;
+    matchedFields: string[];
+    matchedKeywords: string[];
+    score: number;
+  }[];
+  recommendedUnit: HandlerUnit | null;
+  recommendedDeadlineDays: number | null;
+  appliedRecommendation: boolean;
+  hasConflict: boolean;
+  dispatchMethod: 'auto' | 'manual' | 'recommended';
+  dispatchOperator: string;
+  dispatchTime: string;
 }
 
 export interface FilterOptions {
@@ -155,4 +173,34 @@ export interface ContactPerson {
 export interface UnitContact {
   unit: HandlerUnit;
   contacts: ContactPerson[];
+}
+
+export interface DispatchRule {
+  id: string;
+  name: string;
+  category: TicketCategory | '';
+  area: Area | '';
+  keywords: string[];
+  handlerUnit: HandlerUnit;
+  deadlineDays: number;
+  priority: number;
+  enabled: boolean;
+  description?: string;
+  createTime: string;
+  updateTime: string;
+}
+
+export interface MatchResult {
+  rule: DispatchRule;
+  matchedFields: string[];
+  matchedKeywords: string[];
+  score: number;
+}
+
+export interface DispatchRecommendation {
+  handlerUnit: HandlerUnit | null;
+  deadlineDays: number | null;
+  matchedRules: MatchResult[];
+  hasConflict: boolean;
+  conflictReason?: string;
 }

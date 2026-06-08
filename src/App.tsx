@@ -7,6 +7,7 @@ import Supervision from "@/pages/Supervision";
 import BatchImport from "@/pages/BatchImport";
 import MyTodo from "@/pages/MyTodo";
 import ContactBook from "@/pages/ContactBook";
+import DispatchRules from "@/pages/DispatchRules";
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
           <Route path="/tickets/batch-import" element={<BatchImport />} />
           <Route path="/supervision" element={<Supervision />} />
           <Route path="/contacts" element={<ContactBook />} />
+          <Route path="/dispatch-rules" element={<DispatchRules />} />
         </Route>
       </Routes>
     </Router>

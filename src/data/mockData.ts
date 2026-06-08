@@ -1,5 +1,5 @@
-import { Ticket, TicketCategory, Area, HandlerUnit, ProgressLog, ContactPerson } from '@/types';
-import { addDays, formatDate, generateId } from '@/utils/date';
+import { Ticket, TicketCategory, Area, HandlerUnit, ProgressLog, ContactPerson, DispatchRule } from '@/types';
+import { addDays, formatDate, generateId, formatDateTime } from '@/utils/date';
 
 const now = new Date();
 
@@ -308,4 +308,174 @@ export const mockContacts: ContactPerson[] = [
   createMockContact('市场监督管理局', '何公平', '13800138022', '局长', true, '负责市监局全面工作'),
   createMockContact('市场监督管理局', '吕质量', '13800138023', '副局长', false, '分管食品安全'),
   createMockContact('市场监督管理局', '施维权', '13800138024', '科长', false, ''),
+];
+
+function createMockRule(
+  name: string,
+  category: TicketCategory | '',
+  area: Area | '',
+  keywords: string[],
+  handlerUnit: HandlerUnit,
+  deadlineDays: number,
+  priority: number,
+  description?: string
+): DispatchRule {
+  const nowStr = formatDateTime(new Date());
+  return {
+    id: generateId(),
+    name,
+    category,
+    area,
+    keywords,
+    handlerUnit,
+    deadlineDays,
+    priority,
+    enabled: true,
+    description,
+    createTime: nowStr,
+    updateTime: nowStr,
+  };
+}
+
+export const mockDispatchRules: DispatchRule[] = [
+  createMockRule(
+    '城市管理-东城区-路灯问题',
+    '城市管理',
+    '东城区',
+    ['路灯', '照明', '灯不亮', '路灯损坏'],
+    '城市管理委员会',
+    3,
+    100,
+    '东城区路灯相关问题优先处理'
+  ),
+  createMockRule(
+    '城市管理-朝阳区-道路问题',
+    '城市管理',
+    '朝阳区',
+    ['道路', '坑洼', '积水', '路面', '井盖'],
+    '城市管理委员会',
+    7,
+    90,
+    '朝阳区道路养护相关问题'
+  ),
+  createMockRule(
+    '交通运输-公交问题',
+    '交通运输',
+    '',
+    ['公交', '公交车', '公交站', '候车亭', '站牌'],
+    '交通委员会',
+    5,
+    80,
+    '公共交通设施相关问题'
+  ),
+  createMockRule(
+    '交通运输-地铁建议',
+    '交通运输',
+    '',
+    ['地铁', '轨道交通', '运营时间', '地铁线路'],
+    '交通委员会',
+    15,
+    70,
+    '地铁运营相关建议'
+  ),
+  createMockRule(
+    '住房建设-物业投诉',
+    '住房建设',
+    '',
+    ['物业', '物业管理', '小区物业', '物业服务', '电梯'],
+    '住房和城乡建设委员会',
+    10,
+    85,
+    '物业管理相关投诉'
+  ),
+  createMockRule(
+    '住房建设-房屋维修',
+    '住房建设',
+    '东城区',
+    ['房屋漏水', '维修', '老小区', '房屋修缮'],
+    '住房和城乡建设委员会',
+    7,
+    95,
+    '东城区老旧小区房屋维修问题'
+  ),
+  createMockRule(
+    '劳动社保-社保查询',
+    '劳动社保',
+    '',
+    ['社保', '养老保险', '医疗保险', '缴费', '社保查询'],
+    '人力资源和社会保障局',
+    5,
+    80,
+    '社会保险相关问题'
+  ),
+  createMockRule(
+    '教育文化-学校周边',
+    '教育文化',
+    '',
+    ['学校', '小学', '中学', '校园', '学生安全', '交通拥堵'],
+    '教育委员会',
+    10,
+    75,
+    '学校周边环境问题'
+  ),
+  createMockRule(
+    '医疗卫生-医院挂号',
+    '医疗卫生',
+    '',
+    ['医院', '挂号', '排队', '预约', '看病难'],
+    '卫生健康委员会',
+    7,
+    80,
+    '医疗服务相关问题'
+  ),
+  createMockRule(
+    '环境保护-噪音扰民',
+    '环境保护',
+    '',
+    ['噪音', '噪声', '扰民', '施工噪音', '夜间施工'],
+    '生态环境局',
+    3,
+    90,
+    '噪音污染相关投诉，加急处理'
+  ),
+  createMockRule(
+    '环境保护-石景山区工地',
+    '环境保护',
+    '石景山区',
+    ['工地', '施工', '扬尘', '建筑垃圾'],
+    '生态环境局',
+    5,
+    85,
+    '石景山区工地环境问题'
+  ),
+  createMockRule(
+    '市场监管-价格投诉',
+    '市场监管',
+    '',
+    ['价格', '标价', '欺诈', '超市', '涨价', '乱收费'],
+    '市场监督管理局',
+    7,
+    80,
+    '价格相关投诉举报'
+  ),
+  createMockRule(
+    '市场监管-食品安全',
+    '市场监管',
+    '',
+    ['食品', '餐厅', '卫生', '食品安全', '变质', '过期'],
+    '市场监督管理局',
+    3,
+    95,
+    '食品安全问题，优先处理'
+  ),
+  createMockRule(
+    '通用-紧急事项',
+    '',
+    '',
+    ['紧急', '马上', '立刻', '严重', '安全隐患', '危险'],
+    '城市管理委员会',
+    1,
+    200,
+    '涉及安全的紧急事项'
+  ),
 ];

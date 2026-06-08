@@ -19,7 +19,10 @@ import {
   X,
   Phone,
   BadgeCheck,
-  BookOpen
+  BookOpen,
+  Sparkles,
+  Zap,
+  Info
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { useContactStore } from '@/store/useContactStore';
@@ -27,6 +30,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Timeline } from '@/components/Timeline';
 import { getRiskLevel, getDeadlineLabel, generateId, formatDateTime, formatFileSize } from '@/utils/date';
 import { Attachment, HandlerUnit } from '@/types';
+import { getMatchReasonText } from '@/utils/dispatchRule';
 import { clsx } from 'clsx';
 
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
@@ -599,6 +603,129 @@ export default function TicketDetail() {
               );
             })()}
           </div>
+
+          {/* Dispatch Info */}
+          {ticket.dispatchInfo && (
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-violet-50 to-purple-50">
+                <div className="flex items-center space-x-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-purple-600">
+                    <Sparkles className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900">分派依据</h3>
+                    <p className="text-xs text-gray-500">智能分派规则匹配结果</p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500">分派方式</span>
+                  <span className={clsx(
+                    'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
+                    ticket.dispatchInfo.dispatchMethod === 'auto'
+                      ? 'bg-green-100 text-green-700'
+                      : ticket.dispatchInfo.dispatchMethod === 'recommended'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-gray-100 text-gray-700'
+                  )}>
+                    {ticket.dispatchInfo.dispatchMethod === 'auto' && '智能分派'}
+                    {ticket.dispatchInfo.dispatchMethod === 'recommended' && '推荐采纳'}
+                    {ticket.dispatchInfo.dispatchMethod === 'manual' && '人工分派'}
+                  </span>
+                </div>
+
+                {ticket.dispatchInfo.hasConflict && (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                    <div className="flex items-start space-x-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-700">分派时存在规则冲突，需人工确认</p>
+                    </div>
+                  </div>
+                )}
+
+                {ticket.dispatchInfo.matchedRules.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-2">命中规则</p>
+                    <div className="space-y-2">
+                      {ticket.dispatchInfo.matchedRules.map((match, index) => (
+                        <div
+                          key={match.ruleId}
+                          className={clsx(
+                            'rounded-lg border p-3',
+                            index === 0
+                              ? 'border-primary-200 bg-primary-50/50'
+                              : 'border-gray-200 bg-gray-50'
+                          )}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={clsx(
+                              'text-xs font-medium',
+                              index === 0 ? 'text-primary-700' : 'text-gray-600'
+                            )}>
+                              {match.ruleName}
+                            </span>
+                            <span className={clsx(
+                              'text-xs font-semibold',
+                              match.score >= 60
+                                ? 'text-green-600'
+                                : match.score >= 30
+                                  ? 'text-amber-600'
+                                  : 'text-gray-500'
+                            )}>
+                              {match.score} 分
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            {match.matchedFields.length > 0 || match.matchedKeywords.length > 0
+                              ? getMatchReasonText({
+                                  rule: { id: match.ruleId, name: match.ruleName } as any,
+                                  matchedFields: match.matchedFields,
+                                  matchedKeywords: match.matchedKeywords,
+                                  score: match.score,
+                                })
+                              : '部分条件匹配'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="border-t border-gray-100 pt-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">推荐单位</span>
+                    <span className="text-gray-700 font-medium">
+                      {ticket.dispatchInfo.recommendedUnit || '-'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">推荐期限</span>
+                    <span className="text-gray-700 font-medium">
+                      {ticket.dispatchInfo.recommendedDeadlineDays
+                        ? `${ticket.dispatchInfo.recommendedDeadlineDays} 天`
+                        : '-'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">调度员</span>
+                    <span className="text-gray-700">{ticket.dispatchInfo.dispatchOperator}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">分派时间</span>
+                    <span className="text-gray-700">{ticket.dispatchInfo.dispatchTime}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => navigate('/dispatch-rules')}
+                  className="w-full text-center text-xs text-gray-500 hover:text-primary-600 transition-colors"
+                >
+                  查看全部分派规则 →
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Quick Stats */}
           <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">

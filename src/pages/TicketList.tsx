@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Clock, CheckCircle, AlertCircle, Loader2, ChevronRight } from 'lucide-react';
+import { Clock, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { StatsCard } from '@/components/StatsCard';
 import { FilterBar } from '@/components/FilterBar';
@@ -123,9 +123,20 @@ export default function TicketList() {
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <p className="text-sm font-medium text-gray-900 max-w-xs truncate">
-                        {ticket.title}
-                      </p>
+                      <div className="flex items-center space-x-2">
+                        <p className="text-sm font-medium text-gray-900 max-w-xs truncate">
+                          {ticket.title}
+                        </p>
+                        {ticket.dispatchInfo?.dispatchMethod && ticket.dispatchInfo.dispatchMethod !== 'manual' && (
+                          <span
+                            className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-violet-50 text-violet-600 text-xs font-medium flex-shrink-0"
+                            title={ticket.dispatchInfo.dispatchMethod === 'auto' ? '智能分派' : '推荐采纳'}
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            <span>{ticket.dispatchInfo.dispatchMethod === 'auto' ? '智能' : '推荐'}</span>
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-4">
                       <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">

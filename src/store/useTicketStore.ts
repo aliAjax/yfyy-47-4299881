@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Ticket, TicketStatus, ProgressLog, FilterOptions, UrgeRecord, ReturnRecord, Attachment } from '@/types';
+import { Ticket, TicketStatus, ProgressLog, FilterOptions, UrgeRecord, ReturnRecord, Attachment, DispatchInfo } from '@/types';
 import { mockTickets } from '@/data/mockData';
 import { generateId, formatDateTime } from '@/utils/date';
 
@@ -24,7 +24,7 @@ interface TicketState {
     overdue: number;
   };
   
-  addTicket: (ticket: Omit<Ticket, 'id' | 'progressLogs' | 'attachments' | 'urgeRecords' | 'returnRecords' | 'creator' | 'status'>) => void;
+  addTicket: (ticket: Omit<Ticket, 'id' | 'progressLogs' | 'attachments' | 'urgeRecords' | 'returnRecords' | 'creator' | 'status' | 'dispatchInfo'> & { dispatchInfo?: DispatchInfo }) => void;
   batchAddTickets: (tickets: Omit<Ticket, 'id' | 'progressLogs' | 'attachments' | 'urgeRecords' | 'returnRecords' | 'creator' | 'status'>[]) => number;
   updateTicketStatus: (ticketId: string, status: TicketStatus) => void;
   addProgressLog: (ticketId: string, content: string, type: ProgressLog['type'], operator: string) => void;
@@ -51,6 +51,9 @@ interface TicketState {
     returned: number;
   };
   getSupervisorTodoTickets: (type: 'highRisk' | 'pendingUrge' | 'returned') => Ticket[];
+  
+  getTicketCountByRule: (ruleId: string) => number;
+  getTicketsByRule: (ruleId: string) => Ticket[];
 }
 
 const initialFilterOptions: FilterOptions = {
@@ -141,6 +144,7 @@ export const useTicketStore = create<TicketState>()(
           id: 'GD' + Date.now().toString().slice(-8),
           status: 'pending',
           creator: '热线坐席员',
+          dispatchInfo: ticketData.dispatchInfo,
           progressLogs: [
             {
               id: generateId(),
@@ -153,7 +157,7 @@ export const useTicketStore = create<TicketState>()(
             {
               id: generateId(),
               ticketId: '',
-              content: `工单已分派至${ticketData.handlerUnit}`,
+              content: `工单已分派至${ticketData.handlerUnit}${ticketData.dispatchInfo?.dispatchMethod === 'recommended' ? '（智能推荐）' : ''}`,
               operator: '工单调度员',
               createTime: formatDateTime(new Date()),
               type: 'assign',
@@ -471,6 +475,20 @@ export const useTicketStore = create<TicketState>()(
           default:
             return [];
         }
+      },
+
+      getTicketCountByRule: (ruleId) => {
+        const { tickets } = get();
+        return tickets.filter(t => 
+          t.dispatchInfo?.matchedRules?.some(m => m.ruleId === ruleId)
+        ).length;
+      },
+
+      getTicketsByRule: (ruleId) => {
+        const { tickets } = get();
+        return tickets
+          .filter(t => t.dispatchInfo?.matchedRules?.some(m => m.ruleId === ruleId))
+          .sort((a, b) => new Date(b.assignTime).getTime() - new Date(a.assignTime).getTime());
       },
     }),
     {
