@@ -252,6 +252,26 @@ export interface DispatchRecommendation {
   conflictReason?: string;
 }
 
+export interface KnowledgeBaseEntry {
+  id: string;
+  title: string;
+  category: TicketCategory | '';
+  keywords: string[];
+  handlerUnit: HandlerUnit;
+  replyTemplate: string;
+  handlingPoints: string[];
+  enabled: boolean;
+  createTime: string;
+  updateTime: string;
+}
+
+export interface KnowledgeMatchResult {
+  entry: KnowledgeBaseEntry;
+  matchedFields: string[];
+  matchedKeywords: string[];
+  score: number;
+}
+
 export type HolidayType = 'holiday' | 'workday';
 
 export interface HolidayConfig {

@@ -12,6 +12,7 @@ import HolidayConfig from "@/pages/HolidayConfig";
 import SLARules from "@/pages/SLARules";
 import Dashboard from "@/pages/Dashboard";
 import ArchiveList from "@/pages/ArchiveList";
+import KnowledgeBase from "@/pages/KnowledgeBase";
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/supervision" element={<Supervision />} />
           <Route path="/archives" element={<ArchiveList />} />
           <Route path="/contacts" element={<ContactBook />} />
+          <Route path="/knowledge-base" element={<KnowledgeBase />} />
           <Route path="/dispatch-rules" element={<DispatchRules />} />
           <Route path="/sla-rules" element={<SLARules />} />
           <Route path="/holiday-config" element={<HolidayConfig />} />

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { useContactStore } from '@/store/useContactStore';
+import { useKnowledgeBaseStore } from '@/store/useKnowledgeBaseStore';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timeline } from '@/components/Timeline';
 import { ArchiveReviewModal } from '@/components/ArchiveReviewModal';
@@ -35,9 +36,11 @@ import {
   Attachment,
   COMPLETION_QUALITY_LABELS,
   HandlerUnit,
+  KnowledgeMatchResult,
   SATISFACTION_LABELS,
 } from '@/types';
 import { getMatchReasonText } from '@/utils/dispatchRule';
+import { getKnowledgeMatchReasonText } from '@/utils/knowledgeBase';
 import { clsx } from 'clsx';
 
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
@@ -56,6 +59,7 @@ export default function TicketDetail() {
     archiveTicket
   } = useTicketStore();
   const { getOnDutyContact, getContactsByUnit } = useContactStore();
+  const { searchEntries } = useKnowledgeBaseStore();
   const { getRiskLevel, getDeadlineLabel } = useWorkday();
   
   const ticket = getTicketById(id || '');
@@ -74,6 +78,19 @@ export default function TicketDetail() {
   const [attachmentError, setAttachmentError] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const resultKnowledgeMatches = useMemo(() => {
+    if (!ticket || (!ticket.title && !ticket.content && !resultText)) {
+      return [];
+    }
+    return searchEntries({
+      title: ticket.title,
+      content: ticket.content,
+      result: resultText,
+      category: ticket.category,
+      handlerUnit: ticket.handlerUnit,
+    }).slice(0, 3);
+  }, [ticket, resultText, searchEntries]);
 
   if (!ticket) {
     return (
@@ -119,6 +136,14 @@ export default function TicketDetail() {
     setPendingAttachments([]);
     setAttachmentError('');
     setShowResultForm(false);
+  };
+
+  const applyResultKnowledgeEntry = (match: KnowledgeMatchResult) => {
+    const { replyTemplate } = match.entry;
+    setResultText(prev => {
+      if (prev.includes(replyTemplate)) return prev;
+      return `${prev.trim()}${prev.trim() ? '\n\n' : ''}${replyTemplate}`;
+    });
   };
 
   const handleFileSelect = (files: FileList | null) => {
@@ -440,6 +465,48 @@ export default function TicketDetail() {
                       rows={5}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-all"
                     />
+                  </div>
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <BookOpen className="h-4 w-4 text-emerald-600" />
+                        <span className="text-sm font-medium text-emerald-900">知识库推荐</span>
+                      </div>
+                      <button
+                        onClick={() => navigate('/knowledge-base')}
+                        className="text-xs text-emerald-700 hover:text-emerald-800"
+                      >
+                        管理知识库
+                      </button>
+                    </div>
+                    {resultKnowledgeMatches.length === 0 ? (
+                      <p className="text-sm text-emerald-700">暂无匹配知识条目</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {resultKnowledgeMatches.map(match => (
+                          <div key={match.entry.id} className="rounded-lg border border-emerald-100 bg-white p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-900">{match.entry.title}</p>
+                                <p className="mt-1 text-xs text-gray-500">
+                                  {getKnowledgeMatchReasonText(match) || '内容相似匹配'}
+                                </p>
+                              </div>
+                              <span className="flex-shrink-0 text-xs font-semibold text-emerald-600">{match.score} 分</span>
+                            </div>
+                            <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-gray-600">
+                              {match.entry.replyTemplate}
+                            </p>
+                            <button
+                              onClick={() => applyResultKnowledgeEntry(match)}
+                              className="mt-3 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
+                            >
+                              带入模板
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">

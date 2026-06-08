@@ -24,10 +24,12 @@ import { useTicketStore } from '@/store/useTicketStore';
 import { useContactStore } from '@/store/useContactStore';
 import { useDispatchRuleStore } from '@/store/useDispatchRuleStore';
 import { useSLARuleStore } from '@/store/useSLARuleStore';
+import { useKnowledgeBaseStore } from '@/store/useKnowledgeBaseStore';
 import { useWorkday } from '@/hooks/useWorkday';
-import { CATEGORIES, AREAS, HANDLER_UNITS, TicketCategory, Area, HandlerUnit, MatchResult } from '@/types';
+import { CATEGORIES, AREAS, HANDLER_UNITS, TicketCategory, Area, HandlerUnit, KnowledgeMatchResult, MatchResult } from '@/types';
 import { formatDate } from '@/utils/date';
 import { getDispatchRecommendation, getMatchReasonText } from '@/utils/dispatchRule';
+import { getKnowledgeMatchReasonText } from '@/utils/knowledgeBase';
 import { getSLARecommendation } from '@/utils/slaRule';
 import { clsx } from 'clsx';
 
@@ -37,6 +39,7 @@ export default function NewTicket() {
   const { getOnDutyContact, getContactsByUnit } = useContactStore();
   const { getEnabledRules } = useDispatchRuleStore();
   const { getEnabledRules: getEnabledSLARules } = useSLARuleStore();
+  const { searchEntries } = useKnowledgeBaseStore();
   const { calculateDeadline } = useWorkday();
 
   const [formData, setFormData] = useState({
@@ -77,6 +80,18 @@ export default function NewTicket() {
       handlerUnit: formData.handlerUnit,
     });
   }, [formData.category, formData.handlerUnit, slaRules]);
+
+  const knowledgeMatches = useMemo(() => {
+    if (!formData.title && !formData.content && !formData.category) {
+      return [];
+    }
+    return searchEntries({
+      title: formData.title,
+      content: formData.content,
+      category: formData.category,
+      handlerUnit: formData.handlerUnit,
+    }).slice(0, 3);
+  }, [formData.title, formData.content, formData.category, formData.handlerUnit, searchEntries]);
 
   const hasRecommendation = recommendation && recommendation.handlerUnit;
   const hasSLARecommendation = slaRecommendation && slaRecommendation.deadlineDays !== null;
@@ -197,6 +212,21 @@ export default function NewTicket() {
       setHasUserModifiedUnit(false);
       setHasUserModifiedDeadline(false);
     }
+  };
+
+  const applyKnowledgeEntry = (match: KnowledgeMatchResult) => {
+    const { entry } = match;
+    setFormData(prev => {
+      const templateText = `\n\n【知识库模板】${entry.replyTemplate}`;
+      return {
+        ...prev,
+        handlerUnit: entry.handlerUnit,
+        content: prev.content.includes(entry.replyTemplate)
+          ? prev.content
+          : `${prev.content.trim()}${templateText}`.trim(),
+      };
+    });
+    setHasUserModifiedUnit(false);
   };
 
   const getScoreColor = (score: number) => {
@@ -656,6 +686,67 @@ export default function NewTicket() {
                 )}
               </div>
             )}
+          </div>
+
+          {/* Knowledge Recommendation Card */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="border-b border-gray-100 px-5 py-4 bg-gradient-to-r from-emerald-50 to-teal-50">
+              <div className="flex items-center space-x-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600">
+                  <BookOpen className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">知识库推荐</h3>
+                  <p className="text-xs text-gray-500">匹配办理口径与答复模板</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-5">
+              {knowledgeMatches.length === 0 ? (
+                <div className="py-5 text-center">
+                  <BookOpen className="mx-auto mb-3 h-9 w-9 text-gray-300" />
+                  <p className="text-sm text-gray-500">暂无匹配知识条目</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {knowledgeMatches.map((match) => (
+                    <div key={match.entry.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900">{match.entry.title}</p>
+                          <p className="mt-1 text-xs text-gray-500">
+                            {getKnowledgeMatchReasonText(match) || '内容相似匹配'}
+                          </p>
+                        </div>
+                        <span className="flex-shrink-0 text-xs font-semibold text-emerald-600">{match.score} 分</span>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-gray-600">
+                        {match.entry.replyTemplate}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {match.entry.handlingPoints.slice(0, 3).map(point => (
+                          <span key={point} className="rounded-full bg-white px-2 py-0.5 text-xs text-gray-500">
+                            {point}
+                          </span>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => applyKnowledgeEntry(match)}
+                        className="mt-3 w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
+                      >
+                        带入模板文本
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => navigate('/knowledge-base')}
+                    className="w-full text-center text-xs text-gray-500 hover:text-primary-600 transition-colors"
+                  >
+                    查看知识库 →
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Tips Card */}

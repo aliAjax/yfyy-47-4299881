@@ -30,6 +30,7 @@ const navItems = [
   { path: '/supervision', label: '督办中心', icon: AlertTriangle },
   { path: '/archives', label: '归档复盘', icon: Archive },
   { path: '/contacts', label: '通讯录', icon: BookOpen },
+  { path: '/knowledge-base', label: '知识库', icon: FileText },
   { path: '/dispatch-rules', label: '分派规则', icon: Settings },
   { path: '/sla-rules', label: 'SLA时限', icon: Clock },
   { path: '/holiday-config', label: '节假日配置', icon: CalendarClock },
