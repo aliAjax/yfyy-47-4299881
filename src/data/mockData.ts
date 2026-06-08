@@ -1,4 +1,4 @@
-import { Ticket, TicketCategory, Area, HandlerUnit, ProgressLog, ContactPerson, DispatchRule, HolidayConfig, SLARule, ArchiveInfo, SatisfactionLevel, QualityLevel, ProblemTag, KnowledgeEntry, CoOrganizer, CoOrgProgressLog } from '@/types';
+import { Ticket, TicketCategory, Area, HandlerUnit, ProgressLog, ContactPerson, DispatchRule, HolidayConfig, SLARule, ArchiveInfo, SatisfactionLevel, QualityLevel, ProblemTag, KnowledgeEntry, CoOrganizer } from '@/types';
 import { addDays, formatDate, generateId, formatDateTime } from '@/utils/date';
 
 const now = new Date();

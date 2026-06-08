@@ -18,21 +18,13 @@ import {
   Copy,
   Info,
   Sparkles,
-  ChevronDown,
-  SortDesc,
-  SortAsc,
-  ArrowUpDown,
   TrendingUp,
-  Clock,
-  ListCheck,
-  Check,
-  MoreHorizontal,
-  BarChart3
 } from 'lucide-react';
 import { useKnowledgeStore } from '@/store/useKnowledgeStore';
 import { CATEGORIES, HANDLER_UNITS, TicketCategory, HandlerUnit, KnowledgeEntry } from '@/types';
-import { getScoreBadgeColor, getScoreColor } from '@/utils/knowledge';
 import { clsx } from 'clsx';
+
+type KnowledgeSortBy = 'updateTime' | 'useCount' | 'createTime';
 
 interface KnowledgeFormData {
   title: string;
@@ -263,7 +255,7 @@ export default function KnowledgeBase() {
     setViewingEntry(entry);
   };
 
-  const handleSortChange = (sort: 'updateTime' | 'useCount' | 'createTime') => {
+  const handleSortChange = (sort: KnowledgeSortBy) => {
     setSortBy(sort);
   };
 
@@ -454,7 +446,7 @@ export default function KnowledgeBase() {
             <span className="text-sm text-gray-500">排序：</span>
             <select
               value={sortBy}
-              onChange={(e) => handleSortChange(e.target.value as any)}
+              onChange={(e) => handleSortChange(e.target.value as KnowledgeSortBy)}
               className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
             >
               <option value="updateTime">最近更新</option>

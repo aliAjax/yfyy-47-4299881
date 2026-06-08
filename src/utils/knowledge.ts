@@ -1,4 +1,4 @@
-import { KnowledgeEntry, KnowledgeMatchResult, KnowledgeSearchParams, TicketCategory, Area, TemplateApplyOptions, TemplateInsertMode } from '@/types';
+import { KnowledgeEntry, KnowledgeMatchResult, KnowledgeSearchParams, TemplateApplyOptions } from '@/types';
 
 const CATEGORY_WEIGHT = 20;
 const AREA_WEIGHT = 15;
@@ -222,7 +222,7 @@ export function applyTemplateToContent(
 }
 
 export function extractKeywordsFromText(text: string): string[] {
-  const cleaned = text.toLowerCase().replace(/[，。！？、；：""''（）【】《》…—\[\](){}<>,.?;:\'"-]/g, ' ');
+  const cleaned = text.toLowerCase().replace(/[，。！？、；：""''（）【】《》…—[\](){}<>,.?;:'"-]/g, ' ');
   const words = cleaned.split(/\s+/).filter(w => w.length >= 2);
   
   const stopWords = new Set([

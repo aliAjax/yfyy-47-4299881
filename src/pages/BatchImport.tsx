@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -9,14 +9,12 @@ import {
   XCircle, 
   Copy, 
   Download,
-  Table,
   Eye,
   AlertTriangle,
   Sparkles,
   Zap,
   Info,
   Clock,
-  Building2,
   CheckCircle2,
   ChevronDown,
   ChevronUp
@@ -59,12 +57,12 @@ export default function BatchImport() {
     return calculateRowRecommendations(parseResult.rows, dispatchRules, slaRules);
   }, [parseResult, dispatchRules, slaRules]);
 
-  const isRowUsingRecommendation = (rowIndex: number): boolean => {
+  const isRowUsingRecommendation = useCallback((rowIndex: number): boolean => {
     if (!useRecommendations) return false;
     const row = rowsWithRecommendations[rowIndex];
     if (!row?.recommendation?.recommendedHandlerUnit) return false;
     return !rowsUsingCsvValue.has(rowIndex);
-  };
+  }, [rowsWithRecommendations, rowsUsingCsvValue, useRecommendations]);
 
   const toggleRowUseRecommendation = (rowIndex: number) => {
     setRowsUsingCsvValue(prev => {
@@ -101,7 +99,7 @@ export default function BatchImport() {
     });
 
     return { usingRec, usingCsv, hasRec, noRec };
-  }, [rowsWithRecommendations, useRecommendations, rowsUsingCsvValue, parseResult]);
+  }, [rowsWithRecommendations, parseResult, isRowUsingRecommendation]);
 
   const handleFileSelect = (file: File) => {
     const reader = new FileReader();
