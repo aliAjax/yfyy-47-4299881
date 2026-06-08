@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -7,7 +7,6 @@ import {
   MapPin,
   Building2,
   Tag,
-  Calendar,
   FileQuestion,
   Phone,
   BadgeCheck,
@@ -26,10 +25,10 @@ import { useContactStore } from '@/store/useContactStore';
 import { useDispatchRuleStore } from '@/store/useDispatchRuleStore';
 import { useSLARuleStore } from '@/store/useSLARuleStore';
 import { useWorkday } from '@/hooks/useWorkday';
-import { CATEGORIES, AREAS, HANDLER_UNITS, TicketCategory, Area, HandlerUnit, MatchResult, SLAMatchResult } from '@/types';
+import { CATEGORIES, AREAS, HANDLER_UNITS, TicketCategory, Area, HandlerUnit, MatchResult } from '@/types';
 import { formatDate } from '@/utils/date';
 import { getDispatchRecommendation, getMatchReasonText } from '@/utils/dispatchRule';
-import { getSLARecommendation, getSLAMatchReasonText } from '@/utils/slaRule';
+import { getSLARecommendation } from '@/utils/slaRule';
 import { clsx } from 'clsx';
 
 export default function NewTicket() {
@@ -101,6 +100,15 @@ export default function NewTicket() {
     const days = parseInt(formData.deadlineDays) || 7;
     return calculateDeadline(new Date(), days);
   }, [formData.deadlineDays, calculateDeadline]);
+
+  useEffect(() => {
+    if (!hasUserModifiedDeadline && formData.deadlineDays !== String(effectiveDeadlineDays)) {
+      setFormData(prev => ({
+        ...prev,
+        deadlineDays: String(effectiveDeadlineDays),
+      }));
+    }
+  }, [effectiveDeadlineDays, formData.deadlineDays, hasUserModifiedDeadline]);
 
   const validate = () => {
     const newErrors: Record<string, string> = {};

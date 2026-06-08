@@ -18,8 +18,7 @@ import {
   Zap
 } from 'lucide-react';
 import { useSLARuleStore } from '@/store/useSLARuleStore';
-import { CATEGORIES, HANDLER_UNITS, TicketCategory, HandlerUnit, SLAMatchResult } from '@/types';
-import { getSLAMatchReasonText } from '@/utils/slaRule';
+import { CATEGORIES, HANDLER_UNITS, TicketCategory, HandlerUnit } from '@/types';
 import { clsx } from 'clsx';
 
 interface SLARuleFormData {

@@ -14,7 +14,7 @@ import {
   Briefcase
 } from 'lucide-react';
 import { useHolidayStore } from '@/store/useHolidayStore';
-import type { HolidayType, HolidayConfig as HolidayConfigType } from '@/types';
+import type { HolidayType } from '@/types';
 import { clsx } from 'clsx';
 
 interface HolidayFormData {

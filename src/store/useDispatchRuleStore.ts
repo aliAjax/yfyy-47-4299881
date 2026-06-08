@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { DispatchRule, TicketCategory, Area, HandlerUnit } from '@/types';
+import { DispatchRule, HandlerUnit } from '@/types';
 import { mockDispatchRules } from '@/data/mockData';
 import { generateId, formatDateTime } from '@/utils/date';
 import { validateRule } from '@/utils/dispatchRule';

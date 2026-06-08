@@ -1,4 +1,4 @@
-import { DispatchRule, MatchResult, DispatchRecommendation, TicketCategory, Area, HandlerUnit } from '@/types';
+import { DispatchRule, MatchResult, DispatchRecommendation, TicketCategory, Area } from '@/types';
 
 const CATEGORY_WEIGHT = 30;
 const AREA_WEIGHT = 20;

@@ -75,7 +75,7 @@ function getHolidayDatesSafe(): { holidayDates: string[]; workdayDates: string[]
         workdayDates: state.getHolidayDatesByType('workday') || [],
       };
     }
-  } catch (e) {
+  } catch {
     // ignore
   }
   return { holidayDates: [], workdayDates: [] };

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   AlertTriangle, 
@@ -24,7 +24,7 @@ export default function Supervision() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { getRiskTickets, getUrgeRecords, getReturnRecords, getSupervisorTodoTickets, tickets } = useTicketStore();
-  const { getDeadlineLabel, getWorkdaysRemaining: getDaysRemaining, getRiskLevel } = useWorkday();
+  const { getDeadlineLabel, getWorkdaysRemaining: getDaysRemaining } = useWorkday();
   
   const tabFromUrl = searchParams.get('tab') as TabType | null;
   const initialTab = tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : 'risk';

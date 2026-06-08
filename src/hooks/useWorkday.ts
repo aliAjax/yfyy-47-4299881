@@ -11,15 +11,15 @@ import {
 } from '@/utils/workday';
 
 export function useWorkday() {
-  const { holidays, getHolidayDatesByType } = useHolidayStore();
+  const { holidays } = useHolidayStore();
 
   const holidayDates = useMemo(() => {
-    return getHolidayDatesByType('holiday');
-  }, [holidays, getHolidayDatesByType]);
+    return holidays.filter(h => h.type === 'holiday').map(h => h.date);
+  }, [holidays]);
 
   const workdayDates = useMemo(() => {
-    return getHolidayDatesByType('workday');
-  }, [holidays, getHolidayDatesByType]);
+    return holidays.filter(h => h.type === 'workday').map(h => h.date);
+  }, [holidays]);
 
   const isWorkday = (date: Date | string) => {
     return isWorkdayFn(date, holidayDates, workdayDates);

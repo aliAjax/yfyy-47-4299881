@@ -20,9 +20,7 @@ import {
   Phone,
   BadgeCheck,
   BookOpen,
-  Sparkles,
-  Zap,
-  Info
+  Sparkles
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { useContactStore } from '@/store/useContactStore';
@@ -681,7 +679,19 @@ export default function TicketDetail() {
                           <p className="text-xs text-gray-500">
                             {match.matchedFields.length > 0 || match.matchedKeywords.length > 0
                               ? getMatchReasonText({
-                                  rule: { id: match.ruleId, name: match.ruleName } as any,
+                                  rule: {
+                                    id: match.ruleId,
+                                    name: match.ruleName,
+                                    category: '',
+                                    area: '',
+                                    keywords: [],
+                                    handlerUnit: ticket.handlerUnit,
+                                    deadlineDays: ticket.dispatchInfo.recommendedDeadlineDays || 7,
+                                    priority: 0,
+                                    enabled: true,
+                                    createTime: ticket.dispatchInfo.dispatchTime,
+                                    updateTime: ticket.dispatchInfo.dispatchTime,
+                                  },
                                   matchedFields: match.matchedFields,
                                   matchedKeywords: match.matchedKeywords,
                                   score: match.score,
