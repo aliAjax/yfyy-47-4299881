@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
 import { clsx } from 'clsx';
 
+const CHART_WIDTH = 100;
+const CHART_PADDING = { top: 20, right: 10, bottom: 40, left: 35 };
+
 interface BarChartProps {
   data: { label: string; value: number }[];
   height?: number;
@@ -13,6 +16,23 @@ export function BarChart({ data, height = 220, color = '#3b82f6', horizontal = f
     const max = Math.max(...data.map(d => d.value), 1);
     return Math.ceil(max * 1.2);
   }, [data]);
+
+  const chartWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
+  const chartHeight = height - CHART_PADDING.top - CHART_PADDING.bottom;
+  const barWidth = (chartWidth / data.length) * 0.6;
+  const barGap = (chartWidth / data.length) * 0.4;
+
+  const yTicks = useMemo(() => {
+    const ticks = [];
+    const step = Math.ceil(maxValue / 4);
+    for (let i = 0; i <= 4; i++) {
+      ticks.push({
+        value: step * i,
+        y: CHART_PADDING.top + chartHeight - (step * i / maxValue) * chartHeight,
+      });
+    }
+    return ticks;
+  }, [maxValue, chartHeight]);
 
   if (horizontal) {
     return (
@@ -44,41 +64,22 @@ export function BarChart({ data, height = 220, color = '#3b82f6', horizontal = f
     );
   }
 
-  const width = 100;
-  const padding = { top: 20, right: 10, bottom: 40, left: 35 };
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
-  const barWidth = (chartWidth / data.length) * 0.6;
-  const barGap = (chartWidth / data.length) * 0.4;
-
-  const yTicks = useMemo(() => {
-    const ticks = [];
-    const step = Math.ceil(maxValue / 4);
-    for (let i = 0; i <= 4; i++) {
-      ticks.push({
-        value: step * i,
-        y: padding.top + chartHeight - (step * i / maxValue) * chartHeight,
-      });
-    }
-    return ticks;
-  }, [maxValue, chartHeight]);
-
   return (
     <div className="w-full" style={{ height }}>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full" preserveAspectRatio="none">
+      <svg viewBox={`0 0 ${CHART_WIDTH} ${height}`} className="w-full h-full" preserveAspectRatio="none">
         {yTicks.map((tick, i) => (
           <g key={i}>
             <line
-              x1={padding.left}
+              x1={CHART_PADDING.left}
               y1={tick.y}
-              x2={width - padding.right}
+              x2={CHART_WIDTH - CHART_PADDING.right}
               y2={tick.y}
               stroke="#e5e7eb"
               strokeWidth="0.3"
               strokeDasharray="2,2"
             />
             <text
-              x={padding.left - 3}
+              x={CHART_PADDING.left - 3}
               y={tick.y + 2}
               textAnchor="end"
               fontSize="3"
@@ -90,9 +91,9 @@ export function BarChart({ data, height = 220, color = '#3b82f6', horizontal = f
         ))}
 
         {data.map((item, i) => {
-          const x = padding.left + i * (barWidth + barGap) + barGap / 2;
+          const x = CHART_PADDING.left + i * (barWidth + barGap) + barGap / 2;
           const barHeight = (item.value / maxValue) * chartHeight;
-          const y = padding.top + chartHeight - barHeight;
+          const y = CHART_PADDING.top + chartHeight - barHeight;
           return (
             <g key={i}>
               <rect
@@ -116,7 +117,7 @@ export function BarChart({ data, height = 220, color = '#3b82f6', horizontal = f
               </text>
               <text
                 x={x + barWidth / 2}
-                y={height - padding.bottom + 10}
+                y={height - CHART_PADDING.bottom + 10}
                 textAnchor="middle"
                 fontSize="2.5"
                 fill="#6b7280"

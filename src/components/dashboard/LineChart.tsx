@@ -1,5 +1,8 @@
 import { useMemo } from 'react';
 
+const CHART_WIDTH = 100;
+const CHART_PADDING = { top: 20, right: 10, bottom: 30, left: 40 };
+
 interface LineChartProps {
   data: { date: string; count: number }[];
   height?: number;
@@ -12,15 +15,13 @@ export function LineChart({ data, height = 200, color = '#3b82f6' }: LineChartPr
     return Math.ceil(max * 1.2);
   }, [data]);
 
-  const width = 100;
-  const padding = { top: 20, right: 10, bottom: 30, left: 40 };
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
+  const chartWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
+  const chartHeight = height - CHART_PADDING.top - CHART_PADDING.bottom;
 
   const points = useMemo(() => {
     return data.map((d, i) => {
-      const x = padding.left + (i / (data.length - 1 || 1)) * chartWidth;
-      const y = padding.top + chartHeight - (d.count / maxValue) * chartHeight;
+      const x = CHART_PADDING.left + (i / (data.length - 1 || 1)) * chartWidth;
+      const y = CHART_PADDING.top + chartHeight - (d.count / maxValue) * chartHeight;
       return { x, y, ...d };
     });
   }, [data, maxValue, chartWidth, chartHeight]);
@@ -36,7 +37,7 @@ export function LineChart({ data, height = 200, color = '#3b82f6' }: LineChartPr
 
   const areaD = useMemo(() => {
     if (points.length === 0) return '';
-    const baseY = padding.top + chartHeight;
+    const baseY = CHART_PADDING.top + chartHeight;
     let d = `M ${points[0].x} ${baseY}`;
     d += ` L ${points[0].x} ${points[0].y}`;
     for (let i = 1; i < points.length; i++) {
@@ -52,7 +53,7 @@ export function LineChart({ data, height = 200, color = '#3b82f6' }: LineChartPr
     for (let i = 0; i <= 4; i++) {
       ticks.push({
         value: step * i,
-        y: padding.top + chartHeight - (step * i / maxValue) * chartHeight,
+        y: CHART_PADDING.top + chartHeight - (step * i / maxValue) * chartHeight,
       });
     }
     return ticks;
@@ -62,7 +63,7 @@ export function LineChart({ data, height = 200, color = '#3b82f6' }: LineChartPr
 
   return (
     <div className="w-full" style={{ height }}>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full" preserveAspectRatio="none">
+      <svg viewBox={`0 0 ${CHART_WIDTH} ${height}`} className="w-full h-full" preserveAspectRatio="none">
         <defs>
           <linearGradient id={gradientId} x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor={color} stopOpacity="0.3" />
@@ -73,16 +74,16 @@ export function LineChart({ data, height = 200, color = '#3b82f6' }: LineChartPr
         {yTicks.map((tick, i) => (
           <g key={i}>
             <line
-              x1={padding.left}
+              x1={CHART_PADDING.left}
               y1={tick.y}
-              x2={width - padding.right}
+              x2={CHART_WIDTH - CHART_PADDING.right}
               y2={tick.y}
               stroke="#e5e7eb"
               strokeWidth="0.3"
               strokeDasharray="2,2"
             />
             <text
-              x={padding.left - 5}
+              x={CHART_PADDING.left - 5}
               y={tick.y + 2}
               textAnchor="end"
               fontSize="3"
@@ -109,7 +110,7 @@ export function LineChart({ data, height = 200, color = '#3b82f6' }: LineChartPr
             <circle cx={point.x} cy={point.y} r="2" fill={color} />
             <text
               x={point.x}
-              y={height - padding.bottom + 12}
+              y={height - CHART_PADDING.bottom + 12}
               textAnchor="middle"
               fontSize="3"
               fill="#6b7280"
