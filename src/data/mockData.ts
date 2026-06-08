@@ -1,4 +1,4 @@
-import { Ticket, TicketCategory, Area, HandlerUnit, ProgressLog } from '@/types';
+import { Ticket, TicketCategory, Area, HandlerUnit, ProgressLog, ContactPerson } from '@/types';
 import { addDays, formatDate, generateId } from '@/utils/date';
 
 const now = new Date();
@@ -255,4 +255,57 @@ export const mockTickets: Ticket[] = [
     6,
     7
   ),
+];
+
+function createMockContact(
+  unit: HandlerUnit,
+  name: string,
+  phone: string,
+  position: string,
+  isOnDuty: boolean,
+  remark?: string
+): ContactPerson {
+  return {
+    id: generateId(),
+    unit,
+    name,
+    phone,
+    position,
+    isOnDuty,
+    remark,
+  };
+}
+
+export const mockContacts: ContactPerson[] = [
+  createMockContact('城市管理委员会', '张建国', '13800138001', '科长', true, '负责市容市貌管理工作'),
+  createMockContact('城市管理委员会', '李晓华', '13800138002', '副科长', false, '分管环境卫生'),
+  createMockContact('城市管理委员会', '王大勇', '13800138003', '科员', false, ''),
+
+  createMockContact('交通委员会', '刘志强', '13800138004', '处长', true, '负责交通运输综合协调'),
+  createMockContact('交通委员会', '陈美玲', '13800138005', '副处长', false, '分管公共交通'),
+  createMockContact('交通委员会', '赵晓峰', '13800138006', '主任科员', false, ''),
+
+  createMockContact('住房和城乡建设委员会', '孙伟华', '13800138007', '主任', true, '负责住建委全面工作'),
+  createMockContact('住房和城乡建设委员会', '周丽娟', '13800138008', '副主任', false, '分管物业管理'),
+  createMockContact('住房和城乡建设委员会', '吴建设', '13800138009', '科长', false, ''),
+
+  createMockContact('人力资源和社会保障局', '郑晓东', '13800138010', '局长', true, '负责人社局全面工作'),
+  createMockContact('人力资源和社会保障局', '钱秀兰', '13800138011', '副局长', false, '分管社保业务'),
+  createMockContact('人力资源和社会保障局', '冯利民', '13800138012', '科长', false, ''),
+
+  createMockContact('教育委员会', '褚卫东', '13800138013', '主任', true, '负责教委全面工作'),
+  createMockContact('教育委员会', '卫老师', '13800138014', '副主任', false, '分管基础教育'),
+  createMockContact('教育委员会', '蒋建国', '13800138015', '处长', false, ''),
+
+  createMockContact('卫生健康委员会', '沈健康', '13800138016', '主任', true, '负责卫健委全面工作'),
+  createMockContact('卫生健康委员会', '韩医生', '13800138017', '副主任', false, '分管医政医管'),
+  createMockContact('卫生健康委员会', '杨护士', '13800138018', '处长', false, ''),
+
+  createMockContact('生态环境局', '朱青山', '13800138019', '局长', true, '负责环保局全面工作'),
+  createMockContact('生态环境局', '秦蓝天', '13800138020', '副局长', false, '分管环境监察'),
+  createMockContact('生态环境局', '许绿水', '13800138021', '科长', false, ''),
+
+  createMockContact('市场监督管理局', '何公平', '13800138022', '局长', true, '负责市监局全面工作'),
+  createMockContact('市场监督管理局', '吕质量', '13800138023', '副局长', false, '分管食品安全'),
+  createMockContact('市场监督管理局', '施维权', '13800138024', '科长', false, ''),
 ];

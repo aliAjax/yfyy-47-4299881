@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, FileText, MapPin, Building2, Tag, Calendar, FileQuestion
+import { ArrowLeft, Send, FileText, MapPin, Building2, Tag, Calendar, FileQuestion, Phone, BadgeCheck, User, BookOpen
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
+import { useContactStore } from '@/store/useContactStore';
 import { CATEGORIES, AREAS, HANDLER_UNITS, TicketCategory, Area, HandlerUnit } from '@/types';
 import { formatDate, addDays } from '@/utils/date';
 
 export default function NewTicket() {
   const navigate = useNavigate();
   const { addTicket } = useTicketStore();
+  const { getOnDutyContact, getContactsByUnit } = useContactStore();
 
   const [formData, setFormData] = useState({
     title: '',
@@ -193,6 +195,68 @@ export default function NewTicket() {
               {errors.handlerUnit && (
                 <p className="mt-1 text-xs text-red-500">{errors.handlerUnit}</p>
               )}
+              {formData.handlerUnit && (() => {
+                const onDuty = getOnDutyContact(formData.handlerUnit as HandlerUnit);
+                const unitContacts = getContactsByUnit(formData.handlerUnit as HandlerUnit);
+                return (
+                  <div className="mt-3 rounded-lg bg-green-50 border border-green-200 overflow-hidden">
+                    <div className="p-3">
+                      <div className="flex items-start space-x-2">
+                        <BadgeCheck className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-green-800">
+                              当前值班联系人
+                            </p>
+                            <button
+                              onClick={() => navigate('/contacts')}
+                              className="inline-flex items-center space-x-1 text-xs text-green-600 hover:text-green-700"
+                            >
+                              <BookOpen className="h-3.5 w-3.5" />
+                              <span>查看通讯录</span>
+                            </button>
+                          </div>
+                          {onDuty ? (
+                            <div className="mt-2 space-y-1">
+                              <div className="flex items-center space-x-3">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-green-100">
+                                  <User className="h-4 w-4 text-green-600" />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-green-800">
+                                    {onDuty.name}
+                                  </p>
+                                  <p className="text-xs text-green-600">{onDuty.position}</p>
+                                </div>
+                              </div>
+                              <a
+                                href={`tel:${onDuty.phone}`}
+                                className="inline-flex items-center space-x-1.5 text-sm text-green-700 hover:text-green-800 font-medium"
+                              >
+                                <Phone className="h-4 w-4" />
+                                <span>{onDuty.phone}</span>
+                              </a>
+                              {onDuty.remark && (
+                                <p className="text-xs text-green-600 mt-1 bg-green-100/50 rounded px-2 py-1">
+                                  备注：{onDuty.remark}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="mt-2 flex items-center space-x-2">
+                              <User className="h-4 w-4 text-green-400" />
+                              <p className="text-sm text-green-600">
+                                暂无值班联系人
+                                {unitContacts.length > 0 && `（共 ${unitContacts.length} 位联系人）`}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* 办理期限 */}

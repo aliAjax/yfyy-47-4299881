@@ -16,13 +16,17 @@ import {
   CheckCircle,
   FileText,
   Upload,
-  X
+  X,
+  Phone,
+  BadgeCheck,
+  BookOpen
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
+import { useContactStore } from '@/store/useContactStore';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timeline } from '@/components/Timeline';
 import { getRiskLevel, getDeadlineLabel, generateId, formatDateTime, formatFileSize } from '@/utils/date';
-import { Attachment } from '@/types';
+import { Attachment, HandlerUnit } from '@/types';
 import { clsx } from 'clsx';
 
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
@@ -39,6 +43,7 @@ export default function TicketDetail() {
     urgeTicket,
     returnTicket
   } = useTicketStore();
+  const { getOnDutyContact, getContactsByUnit } = useContactStore();
   
   const ticket = getTicketById(id || '');
   
@@ -536,6 +541,63 @@ export default function TicketDetail() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Contact Info */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">值班联系人</h3>
+              <button
+                onClick={() => navigate('/contacts')}
+                className="inline-flex items-center space-x-1 text-xs text-primary-600 hover:text-primary-700"
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                <span>通讯录</span>
+              </button>
+            </div>
+            {(() => {
+              const onDuty = getOnDutyContact(ticket.handlerUnit as HandlerUnit);
+              const unitContacts = getContactsByUnit(ticket.handlerUnit as HandlerUnit);
+              return onDuty ? (
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-green-100">
+                      <User className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium text-gray-900">{onDuty.name}</span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                          <BadgeCheck className="h-3 w-3 mr-1" />
+                          值班中
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500">{onDuty.position}</p>
+                    </div>
+                  </div>
+                  <a
+                    href={`tel:${onDuty.phone}`}
+                    className="flex items-center justify-center space-x-2 w-full rounded-lg bg-primary-50 text-primary-700 py-2.5 text-sm font-medium hover:bg-primary-100 transition-colors"
+                  >
+                    <Phone className="h-4 w-4" />
+                    <span>{onDuty.phone}</span>
+                  </a>
+                  {onDuty.remark && (
+                    <p className="text-xs text-gray-500 bg-gray-50 rounded-lg p-2">
+                      备注：{onDuty.remark}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <User className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+                  <p className="text-sm text-gray-500">暂无值班联系人</p>
+                  {unitContacts.length > 0 && (
+                    <p className="text-xs text-gray-400 mt-1">共 {unitContacts.length} 位联系人</p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Quick Stats */}

@@ -141,3 +141,18 @@ export const HANDLER_UNITS: HandlerUnit[] = [
   '生态环境局',
   '市场监督管理局',
 ];
+
+export interface ContactPerson {
+  id: string;
+  unit: HandlerUnit;
+  name: string;
+  phone: string;
+  position: string;
+  isOnDuty: boolean;
+  remark?: string;
+}
+
+export interface UnitContact {
+  unit: HandlerUnit;
+  contacts: ContactPerson[];
+}

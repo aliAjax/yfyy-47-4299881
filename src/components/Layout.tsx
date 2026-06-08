@@ -10,7 +10,8 @@ import {
   User,
   ChevronDown,
   Upload,
-  LayoutDashboard
+  LayoutDashboard,
+  BookOpen
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { clsx } from 'clsx';
@@ -21,6 +22,7 @@ const navItems = [
   { path: '/tickets/new', label: '新建工单', icon: PlusCircle },
   { path: '/tickets/batch-import', label: '批量导入', icon: Upload },
   { path: '/supervision', label: '督办中心', icon: AlertTriangle },
+  { path: '/contacts', label: '通讯录', icon: BookOpen },
 ];
 
 export function Layout() {
