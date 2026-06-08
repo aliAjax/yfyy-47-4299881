@@ -16,14 +16,14 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { getDeadlineLabel, getDaysRemaining } from '@/utils/date';
 import { clsx } from 'clsx';
 
-type TabType = 'risk' | 'urge' | 'return';
+type TabType = 'risk' | 'pendingUrge' | 'urge' | 'return';
 
-const VALID_TABS: TabType[] = ['risk', 'urge', 'return'];
+const VALID_TABS: TabType[] = ['risk', 'pendingUrge', 'urge', 'return'];
 
 export default function Supervision() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { getRiskTickets, getUrgeRecords, getReturnRecords, tickets } = useTicketStore();
+  const { getRiskTickets, getUrgeRecords, getReturnRecords, getSupervisorTodoTickets, tickets } = useTicketStore();
   
   const tabFromUrl = searchParams.get('tab') as TabType | null;
   const initialTab = tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : 'risk';
@@ -41,6 +41,7 @@ export default function Supervision() {
   };
   
   const riskTickets = getRiskTickets();
+  const pendingUrgeTickets = getSupervisorTodoTickets('pendingUrge');
   const urgeRecords = getUrgeRecords();
   const returnRecords = getReturnRecords();
 
@@ -48,6 +49,7 @@ export default function Supervision() {
 
   const tabs = [
     { key: 'risk' as TabType, label: '超期风险', icon: AlertTriangle, count: riskTickets.high.length + riskTickets.medium.length },
+    { key: 'pendingUrge' as TabType, label: '待催办工单', icon: Bell, count: pendingUrgeTickets.length },
     { key: 'urge' as TabType, label: '催办记录', icon: Bell, count: urgeRecords.length },
     { key: 'return' as TabType, label: '退回重办', icon: RotateCcw, count: returnRecords.length },
   ];
@@ -242,6 +244,56 @@ export default function Supervision() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* 待催办工单 */}
+          {activeTab === 'pendingUrge' && (
+            <div>
+              {pendingUrgeTickets.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-200 py-12 text-center">
+                  <Bell className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+                  <p className="text-gray-500">暂无待催办工单</p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-lg border border-orange-200">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-orange-50 border-b border-orange-100">
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-orange-700">工单编号</th>
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-orange-700">诉求标题</th>
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-orange-700">承办单位</th>
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-orange-700">剩余期限</th>
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-orange-700">状态</th>
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold text-orange-700">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-orange-100">
+                      {pendingUrgeTickets.map((ticket) => (
+                        <tr
+                          key={ticket.id}
+                          className="hover:bg-orange-50/50 transition-colors cursor-pointer"
+                          onClick={() => navigate(`/tickets/${ticket.id}`)}
+                        >
+                          <td className="px-4 py-3 text-sm font-mono text-orange-600 font-medium">{ticket.id}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">{ticket.title}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{ticket.handlerUnit}</td>
+                          <td className="px-4 py-3 text-sm text-orange-600 font-medium">
+                            {getDeadlineLabel(ticket.deadline, ticket.status)}
+                          </td>
+                          <td className="px-4 py-3"><StatusBadge status={ticket.status} size="sm" /></td>
+                          <td className="px-4 py-3 text-right">
+                            <button className="inline-flex items-center text-sm text-orange-600 hover:text-orange-700 font-medium">
+                              查看
+                              <ChevronRight className="ml-1 h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

@@ -200,7 +200,7 @@ export default function MyTodo() {
     navigate('/');
   };
 
-  const goToSupervisionWithTab = (tab: 'risk' | 'urge' | 'return') => {
+  const goToSupervisionWithTab = (tab: 'risk' | 'pendingUrge' | 'urge' | 'return') => {
     navigate(`/supervision?tab=${tab}`);
   };
 
@@ -227,7 +227,7 @@ export default function MyTodo() {
         goToSupervisionWithTab('risk');
         break;
       case 'pendingUrge':
-        goToSupervisionWithTab('urge');
+        goToSupervisionWithTab('pendingUrge');
         break;
       case 'returned':
         goToSupervisionWithTab('return');
