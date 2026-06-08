@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
   FileText, 
@@ -17,9 +17,11 @@ import {
   CalendarClock,
   Monitor,
   ExternalLink,
-  Archive
+  Archive,
+  Bell
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
+import { useNotificationStore } from '@/store/useNotificationStore';
 import { HANDLER_UNITS } from '@/types';
 import { clsx } from 'clsx';
 
@@ -29,6 +31,7 @@ const navItems = [
   { path: '/tickets/new', label: '新建工单', icon: PlusCircle },
   { path: '/tickets/batch-import', label: '批量导入', icon: Upload },
   { path: '/supervision', label: '督办中心', icon: AlertTriangle },
+  { path: '/notifications', label: '通知中心', icon: Bell },
   { path: '/archives', label: '归档复盘', icon: Archive },
   { path: '/contacts', label: '通讯录', icon: BookOpen },
   { path: '/knowledge-base', label: '知识库', icon: FileText },
@@ -42,7 +45,13 @@ export function Layout() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentRole, setCurrentRole, currentUnit, setCurrentUnit } = useTicketStore();
+  const { currentRole, setCurrentRole, currentUnit, setCurrentUnit, tickets } = useTicketStore();
+  const syncDeadlineNotifications = useNotificationStore(state => state.syncDeadlineNotifications);
+  const unreadCount = useNotificationStore(state => state.getUnreadCount(currentRole, currentUnit));
+
+  useEffect(() => {
+    syncDeadlineNotifications(tickets);
+  }, [syncDeadlineNotifications, tickets]);
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -89,7 +98,16 @@ export function Layout() {
                 )}
               >
                 <Icon className={clsx('h-5 w-5 flex-shrink-0', isActive && 'scale-110')} />
-                {sidebarOpen && <span>{item.label}</span>}
+                {sidebarOpen && (
+                  <span className="flex flex-1 items-center justify-between">
+                    <span>{item.label}</span>
+                    {item.path === '/notifications' && unreadCount > 0 && (
+                      <span className="ml-2 inline-flex min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-semibold text-white">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
+                  </span>
+                )}
               </NavLink>
             );
           })}
@@ -178,6 +196,18 @@ export function Layout() {
           </div>
           
           <div className="flex items-center space-x-4">
+            <button
+              onClick={() => navigate('/notifications')}
+              className="relative rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+              title="通知中心"
+            >
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-4 text-white">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </button>
             <div className="text-right">
               <p className="text-sm font-medium text-gray-900">
                 {currentRole === 'supervisor' ? '李督办' : '张经办'}

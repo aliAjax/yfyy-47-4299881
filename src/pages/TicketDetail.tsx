@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -26,6 +26,7 @@ import {
   Users
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
+import { useNotificationStore } from '@/store/useNotificationStore';
 import { useContactStore } from '@/store/useContactStore';
 import { useKnowledgeBaseStore } from '@/store/useKnowledgeBaseStore';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -66,9 +67,16 @@ export default function TicketDetail() {
   } = useTicketStore();
   const { getOnDutyContact, getContactsByUnit } = useContactStore();
   const { searchEntries } = useKnowledgeBaseStore();
+  const markTicketNotificationsAsRead = useNotificationStore(state => state.markTicketNotificationsAsRead);
   const { getRiskLevel, getDeadlineLabel } = useWorkday();
   
   const ticket = getTicketById(id || '');
+
+  useEffect(() => {
+    if (id) {
+      markTicketNotificationsAsRead(id, currentRole, currentUnit);
+    }
+  }, [currentRole, currentUnit, id, markTicketNotificationsAsRead]);
   
   const [progressText, setProgressText] = useState('');
   const [resultText, setResultText] = useState('');

@@ -159,6 +159,42 @@ export interface ArchiveFilterOptions {
 
 export type RiskLevel = 'high' | 'medium' | 'low';
 
+export type NotificationType =
+  | 'urge'
+  | 'return'
+  | 'deadline'
+  | 'collaboration_request'
+  | 'collaboration_complete'
+  | 'result_submit';
+
+export type NotificationReadStatus = 'all' | 'unread' | 'read';
+
+export type NotificationRecipientRole = 'supervisor' | 'handler' | 'all';
+
+export interface SupervisionNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  content: string;
+  ticketId: string;
+  ticketTitle: string;
+  handlerUnit: HandlerUnit;
+  recipientRole: NotificationRecipientRole;
+  recipientUnit?: HandlerUnit;
+  operator: string;
+  createTime: string;
+  isRead: boolean;
+}
+
+export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
+  urge: '催办',
+  return: '退回重办',
+  deadline: '即将超期',
+  collaboration_request: '协办请求',
+  collaboration_complete: '协办完成',
+  result_submit: '办理结果提交',
+};
+
 export const STATUS_LABELS: Record<TicketStatus, string> = {
   pending: '待办理',
   processing: '办理中',

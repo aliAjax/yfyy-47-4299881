@@ -20,6 +20,8 @@ import { mockTickets } from '@/data/mockData';
 import { generateId, formatDateTime } from '@/utils/date';
 import { getWorkdaysRemaining } from '@/utils/workday';
 import { useHolidayStore } from './useHolidayStore';
+import { useNotificationStore } from './useNotificationStore';
+import { createNotification } from '@/utils/notification';
 
 interface TicketState {
   tickets: Ticket[];
@@ -353,6 +355,7 @@ export const useTicketStore = create<TicketState>()(
         const now = formatDateTime(new Date());
         const uniqueUnits = Array.from(new Set(units)).filter(Boolean);
         if (uniqueUnits.length === 0 || !description.trim()) return;
+        const createdUnits: HandlerUnit[] = [];
 
         set((state) => ({
           tickets: state.tickets.map(t => {
@@ -373,6 +376,7 @@ export const useTicketStore = create<TicketState>()(
               }));
 
             if (newRecords.length === 0) return t;
+            createdUnits.push(...newRecords.map(record => record.unit));
 
             const collaborationLog: ProgressLog = {
               id: generateId(),
@@ -391,6 +395,22 @@ export const useTicketStore = create<TicketState>()(
             };
           }),
         }));
+
+        const ticket = get().tickets.find(t => t.id === ticketId);
+        if (ticket && createdUnits.length > 0) {
+          useNotificationStore.getState().addNotifications(
+            createdUnits.map(unit => createNotification({
+              type: 'collaboration_request',
+              ticket,
+              title: '收到协办请求',
+              content: `${ticket.handlerUnit}发起协办：${description}`,
+              operator,
+              recipientRole: 'handler',
+              recipientUnit: unit,
+              createTime: now,
+            }))
+          );
+        }
       },
 
       updateCollaborationProgress: (ticketId, recordId, progress, operator) => {
@@ -431,11 +451,15 @@ export const useTicketStore = create<TicketState>()(
       completeCollaboration: (ticketId, recordId, progress, operator) => {
         if (!progress.trim()) return;
         const now = formatDateTime(new Date());
+        let completedRecordUnit: HandlerUnit | undefined;
+        let notificationTicket: Ticket | undefined;
 
         set((state) => ({
           tickets: state.tickets.map(t => {
             if (t.id !== ticketId) return t;
             const targetRecord = getCollaborationRecords(t).find(record => record.id === recordId);
+            completedRecordUnit = targetRecord?.unit;
+            notificationTicket = t;
             const completeLog: ProgressLog = {
               id: generateId(),
               ticketId,
@@ -461,10 +485,35 @@ export const useTicketStore = create<TicketState>()(
             };
           }),
         }));
+
+        if (notificationTicket) {
+          useNotificationStore.getState().addNotifications([
+            createNotification({
+              type: 'collaboration_complete',
+              ticket: notificationTicket,
+              title: '协办单位已完成',
+              content: `${completedRecordUnit || '协办单位'}提交协办完成说明：${progress}`,
+              operator,
+              recipientRole: 'handler',
+              recipientUnit: notificationTicket.handlerUnit,
+              createTime: now,
+            }),
+            createNotification({
+              type: 'collaboration_complete',
+              ticket: notificationTicket,
+              title: '协办单位已完成',
+              content: `${completedRecordUnit || '协办单位'}已完成${notificationTicket.id}协办事项。`,
+              operator,
+              recipientRole: 'supervisor',
+              createTime: now,
+            }),
+          ]);
+        }
       },
 
       submitResult: (ticketId, result, attachments) => {
         const now = formatDateTime(new Date());
+        const ticket = get().tickets.find(t => t.id === ticketId);
         const completeLog: ProgressLog = {
           id: generateId(),
           ticketId,
@@ -486,6 +535,18 @@ export const useTicketStore = create<TicketState>()(
               : t
           ),
         }));
+
+        if (ticket) {
+          useNotificationStore.getState().addNotification(createNotification({
+            type: 'result_submit',
+            ticket,
+            title: '办理结果已提交',
+            content: `${ticket.handlerUnit}已提交${ticket.id}办理结果。`,
+            operator: '承办单位经办人',
+            recipientRole: 'supervisor',
+            createTime: now,
+          }));
+        }
       },
 
       archiveTicket: (ticketId, review, operator) => {
@@ -549,6 +610,7 @@ export const useTicketStore = create<TicketState>()(
 
       urgeTicket: (ticketId, reason, operator) => {
         const now = formatDateTime(new Date());
+        const ticket = get().tickets.find(t => t.id === ticketId);
         const urgeRecord: UrgeRecord = {
           id: generateId(),
           ticketId,
@@ -575,10 +637,24 @@ export const useTicketStore = create<TicketState>()(
               : t
           ),
         }));
+
+        if (ticket) {
+          useNotificationStore.getState().addNotification(createNotification({
+            type: 'urge',
+            ticket,
+            title: '收到催办提醒',
+            content: `督办员催办${ticket.id}：${reason}`,
+            operator,
+            recipientRole: 'handler',
+            recipientUnit: ticket.handlerUnit,
+            createTime: now,
+          }));
+        }
       },
 
       returnTicket: (ticketId, reason, operator) => {
         const now = formatDateTime(new Date());
+        const ticket = get().tickets.find(t => t.id === ticketId);
         const returnRecord: ReturnRecord = {
           id: generateId(),
           ticketId,
@@ -606,6 +682,19 @@ export const useTicketStore = create<TicketState>()(
               : t
           ),
         }));
+
+        if (ticket) {
+          useNotificationStore.getState().addNotification(createNotification({
+            type: 'return',
+            ticket,
+            title: '工单被退回重办',
+            content: `督办员退回${ticket.id}：${reason}`,
+            operator,
+            recipientRole: 'handler',
+            recipientUnit: ticket.handlerUnit,
+            createTime: now,
+          }));
+        }
       },
 
       getRiskTickets: () => {
