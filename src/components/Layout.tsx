@@ -16,7 +16,8 @@ import {
   Clock,
   CalendarClock,
   Monitor,
-  ExternalLink
+  ExternalLink,
+  Archive
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { clsx } from 'clsx';
@@ -27,6 +28,7 @@ const navItems = [
   { path: '/tickets/new', label: '新建工单', icon: PlusCircle },
   { path: '/tickets/batch-import', label: '批量导入', icon: Upload },
   { path: '/supervision', label: '督办中心', icon: AlertTriangle },
+  { path: '/archives', label: '归档复盘', icon: Archive },
   { path: '/contacts', label: '通讯录', icon: BookOpen },
   { path: '/dispatch-rules', label: '分派规则', icon: Settings },
   { path: '/sla-rules', label: 'SLA时限', icon: Clock },

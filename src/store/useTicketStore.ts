@@ -1,6 +1,19 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Ticket, TicketStatus, ProgressLog, FilterOptions, UrgeRecord, ReturnRecord, Attachment, DispatchInfo } from '@/types';
+import {
+  Ticket,
+  TicketStatus,
+  ProgressLog,
+  FilterOptions,
+  UrgeRecord,
+  ReturnRecord,
+  Attachment,
+  DispatchInfo,
+  ArchiveFilterOptions,
+  ArchiveReview,
+  SATISFACTION_LABELS,
+  COMPLETION_QUALITY_LABELS,
+} from '@/types';
 import { mockTickets } from '@/data/mockData';
 import { generateId, formatDateTime } from '@/utils/date';
 import { getWorkdaysRemaining } from '@/utils/workday';
@@ -11,12 +24,15 @@ interface TicketState {
   currentRole: 'handler' | 'supervisor';
   currentUnit: string;
   filterOptions: FilterOptions;
-  
+  archiveFilterOptions: ArchiveFilterOptions;
+
   setCurrentRole: (role: 'handler' | 'supervisor') => void;
   setCurrentUnit: (unit: string) => void;
   setFilterOptions: (options: Partial<FilterOptions>) => void;
   resetFilters: () => void;
-  
+  setArchiveFilterOptions: (options: Partial<ArchiveFilterOptions>) => void;
+  resetArchiveFilters: () => void;
+
   getTicketById: (id: string) => Ticket | undefined;
   getFilteredTickets: () => Ticket[];
   getTicketStats: () => {
@@ -25,20 +41,22 @@ interface TicketState {
     completed: number;
     overdue: number;
   };
-  
+
   addTicket: (ticket: Omit<Ticket, 'id' | 'progressLogs' | 'attachments' | 'urgeRecords' | 'returnRecords' | 'creator' | 'status' | 'dispatchInfo'> & { dispatchInfo?: DispatchInfo }) => void;
   batchAddTickets: (tickets: Omit<Ticket, 'id' | 'progressLogs' | 'attachments' | 'urgeRecords' | 'returnRecords' | 'creator' | 'status'>[]) => number;
   updateTicketStatus: (ticketId: string, status: TicketStatus) => void;
   addProgressLog: (ticketId: string, content: string, type: ProgressLog['type'], operator: string) => void;
   submitResult: (ticketId: string, result: string, attachments?: Attachment[]) => void;
-  
+  archiveTicket: (ticketId: string, review: Omit<ArchiveReview, 'id' | 'ticketId' | 'archivedBy' | 'archiveTime'>, operator: string) => void;
+  getArchivedTickets: () => Ticket[];
+
   urgeTicket: (ticketId: string, reason: string, operator: string) => void;
   returnTicket: (ticketId: string, reason: string, operator: string) => void;
-  
+
   getRiskTickets: () => { high: Ticket[]; medium: Ticket[]; low: Ticket[] };
   getUrgeRecords: () => UrgeRecord[];
   getReturnRecords: () => ReturnRecord[];
-  
+
   getHandlerTodoStats: () => {
     pending: number;
     processing: number;
@@ -46,14 +64,14 @@ interface TicketState {
     upcomingDeadline: number;
   };
   getHandlerTodoTickets: (type: 'pending' | 'processing' | 'returned' | 'upcoming') => Ticket[];
-  
+
   getSupervisorTodoStats: () => {
     highRisk: number;
     pendingUrge: number;
     returned: number;
   };
   getSupervisorTodoTickets: (type: 'highRisk' | 'pendingUrge' | 'returned') => Ticket[];
-  
+
   getTicketCountByRule: (ruleId: string) => number;
   getTicketsByRule: (ruleId: string) => Ticket[];
 }
@@ -65,6 +83,37 @@ const initialFilterOptions: FilterOptions = {
   category: '',
   deadlineRange: '',
 };
+
+const initialArchiveFilterOptions: ArchiveFilterOptions = {
+  handlerUnit: '',
+  category: '',
+  satisfaction: '',
+  archiveTimeRange: '',
+};
+
+function isWithinArchiveRange(archiveTime: string, range: ArchiveFilterOptions['archiveTimeRange']) {
+  if (!range) return true;
+
+  const archivedAt = new Date(archiveTime).getTime();
+  if (Number.isNaN(archivedAt)) return false;
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  switch (range) {
+    case 'today':
+      return archivedAt >= startOfToday;
+    case '7days':
+      return archivedAt >= now.getTime() - 7 * dayMs;
+    case '30days':
+      return archivedAt >= now.getTime() - 30 * dayMs;
+    case '90days':
+      return archivedAt >= now.getTime() - 90 * dayMs;
+    default:
+      return true;
+  }
+}
 
 function getHolidayDatesSafe(): { holidayDates: string[]; workdayDates: string[] } {
   try {
@@ -88,15 +137,22 @@ export const useTicketStore = create<TicketState>()(
       currentRole: 'supervisor',
       currentUnit: '',
       filterOptions: initialFilterOptions,
+      archiveFilterOptions: initialArchiveFilterOptions,
 
       setCurrentRole: (role) => set({ currentRole: role }),
       setCurrentUnit: (unit) => set({ currentUnit: unit }),
-      
+
       setFilterOptions: (options) => set((state) => ({
         filterOptions: { ...state.filterOptions, ...options },
       })),
-      
+
       resetFilters: () => set({ filterOptions: initialFilterOptions }),
+
+      setArchiveFilterOptions: (options) => set((state) => ({
+        archiveFilterOptions: { ...state.archiveFilterOptions, ...options },
+      })),
+
+      resetArchiveFilters: () => set({ archiveFilterOptions: initialArchiveFilterOptions }),
 
       getTicketById: (id) => {
         return get().tickets.find(t => t.id === id);
@@ -124,7 +180,7 @@ export const useTicketStore = create<TicketState>()(
         }
         if (filterOptions.deadlineRange) {
           const { holidayDates, workdayDates } = getHolidayDatesSafe();
-          
+
           filtered = filtered.filter(t => {
             const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
             switch (filterOptions.deadlineRange) {
@@ -147,16 +203,16 @@ export const useTicketStore = create<TicketState>()(
         if (currentRole === 'handler' && currentUnit) {
           list = list.filter(t => t.handlerUnit === currentUnit);
         }
-        
+
         const { holidayDates, workdayDates } = getHolidayDatesSafe();
-        
+
         return {
           pending: list.filter(t => t.status === 'pending').length,
           processing: list.filter(t => t.status === 'processing').length,
           completed: list.filter(t => t.status === 'completed').length,
           overdue: list.filter(t => {
             if (t.status === 'overdue') return true;
-            if (t.status === 'completed') return false;
+            if (t.status === 'completed' || t.status === 'archived') return false;
             const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
             return remaining < 0;
           }).length,
@@ -193,7 +249,7 @@ export const useTicketStore = create<TicketState>()(
           returnRecords: [],
         };
         newTicket.progressLogs.forEach(log => log.ticketId = newTicket.id);
-        
+
         set((state) => ({
           tickets: [newTicket, ...state.tickets],
         }));
@@ -243,7 +299,7 @@ export const useTicketStore = create<TicketState>()(
 
       updateTicketStatus: (ticketId, status) => {
         set((state) => ({
-          tickets: state.tickets.map(t => 
+          tickets: state.tickets.map(t =>
             t.id === ticketId ? { ...t, status } : t
           ),
         }));
@@ -259,9 +315,9 @@ export const useTicketStore = create<TicketState>()(
           type,
         };
         set((state) => ({
-          tickets: state.tickets.map(t => 
-            t.id === ticketId 
-              ? { ...t, progressLogs: [...t.progressLogs, newLog] } 
+          tickets: state.tickets.map(t =>
+            t.id === ticketId
+              ? { ...t, progressLogs: [...t.progressLogs, newLog] }
               : t
           ),
         }));
@@ -278,18 +334,77 @@ export const useTicketStore = create<TicketState>()(
           type: 'complete',
         };
         set((state) => ({
-          tickets: state.tickets.map(t => 
-            t.id === ticketId 
-              ? { 
-                  ...t, 
-                  status: 'completed', 
-                  result, 
+          tickets: state.tickets.map(t =>
+            t.id === ticketId
+              ? {
+                  ...t,
+                  status: 'completed',
+                  result,
                   progressLogs: [...t.progressLogs, completeLog],
                   attachments: attachments ? [...t.attachments, ...attachments] : t.attachments,
-                } 
+                }
               : t
           ),
         }));
+      },
+
+      archiveTicket: (ticketId, review, operator) => {
+        const now = formatDateTime(new Date());
+        const archiveInfo: ArchiveReview = {
+          ...review,
+          id: generateId(),
+          ticketId,
+          archivedBy: operator,
+          archiveTime: now,
+        };
+        const archiveLog: ProgressLog = {
+          id: generateId(),
+          ticketId,
+          content: `【归档复盘】满意度：${SATISFACTION_LABELS[review.satisfaction]}，办结质量：${COMPLETION_QUALITY_LABELS[review.completionQuality]}`,
+          operator,
+          createTime: now,
+          type: 'archive',
+        };
+
+        set((state) => ({
+          tickets: state.tickets.map(t =>
+            t.id === ticketId && t.status === 'completed'
+              ? {
+                  ...t,
+                  status: 'archived',
+                  archiveInfo,
+                  progressLogs: [...t.progressLogs, archiveLog],
+                }
+              : t
+          ),
+        }));
+      },
+
+      getArchivedTickets: () => {
+        const { tickets, archiveFilterOptions, currentRole, currentUnit } = get();
+        let archived = tickets.filter(t => t.status === 'archived' && t.archiveInfo);
+
+        if (currentRole === 'handler' && currentUnit) {
+          archived = archived.filter(t => t.handlerUnit === currentUnit);
+        }
+        if (archiveFilterOptions.handlerUnit) {
+          archived = archived.filter(t => t.handlerUnit === archiveFilterOptions.handlerUnit);
+        }
+        if (archiveFilterOptions.category) {
+          archived = archived.filter(t => t.category === archiveFilterOptions.category);
+        }
+        if (archiveFilterOptions.satisfaction) {
+          archived = archived.filter(t => t.archiveInfo?.satisfaction === archiveFilterOptions.satisfaction);
+        }
+        if (archiveFilterOptions.archiveTimeRange) {
+          archived = archived.filter(t =>
+            t.archiveInfo && isWithinArchiveRange(t.archiveInfo.archiveTime, archiveFilterOptions.archiveTimeRange)
+          );
+        }
+
+        return archived.sort((a, b) =>
+          new Date(b.archiveInfo?.archiveTime || 0).getTime() - new Date(a.archiveInfo?.archiveTime || 0).getTime()
+        );
       },
 
       urgeTicket: (ticketId, reason, operator) => {
@@ -310,13 +425,13 @@ export const useTicketStore = create<TicketState>()(
           type: 'urge',
         };
         set((state) => ({
-          tickets: state.tickets.map(t => 
-            t.id === ticketId 
-              ? { 
-                  ...t, 
+          tickets: state.tickets.map(t =>
+            t.id === ticketId
+              ? {
+                  ...t,
                   urgeRecords: [...t.urgeRecords, urgeRecord],
                   progressLogs: [...t.progressLogs, urgeLog],
-                } 
+                }
               : t
           ),
         }));
@@ -340,14 +455,14 @@ export const useTicketStore = create<TicketState>()(
           type: 'return',
         };
         set((state) => ({
-          tickets: state.tickets.map(t => 
-            t.id === ticketId 
-              ? { 
-                  ...t, 
+          tickets: state.tickets.map(t =>
+            t.id === ticketId
+              ? {
+                  ...t,
                   status: 'returned',
                   returnRecords: [...t.returnRecords, returnRecord],
                   progressLogs: [...t.progressLogs, returnLog],
-                } 
+                }
               : t
           ),
         }));
@@ -355,20 +470,20 @@ export const useTicketStore = create<TicketState>()(
 
       getRiskTickets: () => {
         const { tickets, currentRole, currentUnit } = get();
-        let list = tickets.filter(t => t.status !== 'completed');
+        let list = tickets.filter(t => t.status !== 'completed' && t.status !== 'archived');
         if (currentRole === 'handler' && currentUnit) {
           list = list.filter(t => t.handlerUnit === currentUnit);
         }
-        
+
         const { holidayDates, workdayDates } = getHolidayDatesSafe();
-        
+
         const high: Ticket[] = [];
         const medium: Ticket[] = [];
         const low: Ticket[] = [];
 
         list.forEach(t => {
           const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
-          
+
           if (remaining < 0 || t.status === 'overdue') {
             high.push(t);
           } else if (remaining <= 1) {
@@ -400,11 +515,11 @@ export const useTicketStore = create<TicketState>()(
       getHandlerTodoStats: () => {
         const { tickets, currentUnit } = get();
         const list = tickets.filter(t => t.handlerUnit === currentUnit);
-        
+
         const { holidayDates, workdayDates } = getHolidayDatesSafe();
-        
+
         const upcomingDeadline = list.filter(t => {
-          if (t.status === 'completed') return false;
+          if (t.status === 'completed' || t.status === 'archived') return false;
           const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
           return remaining >= 0 && remaining <= 3;
         }).length;
@@ -420,7 +535,7 @@ export const useTicketStore = create<TicketState>()(
       getHandlerTodoTickets: (type) => {
         const { tickets, currentUnit } = get();
         const list = tickets.filter(t => t.handlerUnit === currentUnit);
-        
+
         const { holidayDates, workdayDates } = getHolidayDatesSafe();
 
         switch (type) {
@@ -435,7 +550,7 @@ export const useTicketStore = create<TicketState>()(
               .sort((a, b) => new Date(b.assignTime).getTime() - new Date(a.assignTime).getTime());
           case 'upcoming':
             return list.filter(t => {
-              if (t.status === 'completed') return false;
+              if (t.status === 'completed' || t.status === 'archived') return false;
               const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
               return remaining >= 0 && remaining <= 3;
             }).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
@@ -446,17 +561,17 @@ export const useTicketStore = create<TicketState>()(
 
       getSupervisorTodoStats: () => {
         const { tickets } = get();
-        
+
         const { holidayDates, workdayDates } = getHolidayDatesSafe();
-        
+
         const highRisk = tickets.filter(t => {
-          if (t.status === 'completed') return false;
+          if (t.status === 'completed' || t.status === 'archived') return false;
           const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
           return remaining < 0 || t.status === 'overdue' || remaining <= 1;
         }).length;
 
         const pendingUrge = tickets.filter(t => {
-          if (t.status === 'completed') return false;
+          if (t.status === 'completed' || t.status === 'archived') return false;
           const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
           return remaining <= 3 && remaining >= 0 && t.urgeRecords.length === 0;
         }).length;
@@ -468,29 +583,29 @@ export const useTicketStore = create<TicketState>()(
 
       getSupervisorTodoTickets: (type) => {
         const { tickets } = get();
-        
+
         const { holidayDates, workdayDates } = getHolidayDatesSafe();
 
         switch (type) {
           case 'highRisk':
             return tickets.filter(t => {
-              if (t.status === 'completed') return false;
+              if (t.status === 'completed' || t.status === 'archived') return false;
               const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
               return remaining < 0 || t.status === 'overdue' || remaining <= 1;
             }).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
           case 'pendingUrge':
             return tickets.filter(t => {
-              if (t.status === 'completed') return false;
+              if (t.status === 'completed' || t.status === 'archived') return false;
               const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
               return remaining <= 3 && remaining >= 0 && t.urgeRecords.length === 0;
             }).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
           case 'returned':
             return tickets.filter(t => t.status === 'returned')
               .sort((a, b) => {
-                const aReturnTime = a.returnRecords.length > 0 
+                const aReturnTime = a.returnRecords.length > 0
                   ? new Date(a.returnRecords[a.returnRecords.length - 1].createTime).getTime()
                   : 0;
-                const bReturnTime = b.returnRecords.length > 0 
+                const bReturnTime = b.returnRecords.length > 0
                   ? new Date(b.returnRecords[b.returnRecords.length - 1].createTime).getTime()
                   : 0;
                 return bReturnTime - aReturnTime;
@@ -502,7 +617,7 @@ export const useTicketStore = create<TicketState>()(
 
       getTicketCountByRule: (ruleId) => {
         const { tickets } = get();
-        return tickets.filter(t => 
+        return tickets.filter(t =>
           t.dispatchInfo?.matchedRules?.some(m => m.ruleId === ruleId)
         ).length;
       },

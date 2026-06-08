@@ -1,4 +1,15 @@
-import { Ticket, TicketCategory, Area, HandlerUnit, ProgressLog, ContactPerson, DispatchRule, HolidayConfig, SLARule } from '@/types';
+import {
+  Ticket,
+  TicketCategory,
+  Area,
+  HandlerUnit,
+  ProgressLog,
+  ContactPerson,
+  DispatchRule,
+  HolidayConfig,
+  SLARule,
+  ArchiveReview,
+} from '@/types';
 import { addDays, formatDate, generateId, formatDateTime } from '@/utils/date';
 
 const now = new Date();
@@ -59,6 +70,38 @@ function createMockTicket(
     });
   }
 
+  let archiveInfo: ArchiveReview | undefined;
+  if (status === 'archived') {
+    const completeTime = formatDate(addDays(assignTime, deadlineDays - 1)) + ' 16:45';
+    const archiveTime = formatDate(addDays(assignTime, deadlineDays)) + ' 10:20';
+    progressLogs.push({
+      id: generateId(),
+      ticketId: id,
+      content: '已完成办理，提交办理结果已提交',
+      operator: '承办单位经办人',
+      createTime: completeTime,
+      type: 'complete' as const,
+    });
+    progressLogs.push({
+      id: generateId(),
+      ticketId: id,
+      content: '【归档复盘】满意度：满意，办结质量：优秀',
+      operator: '督办员',
+      createTime: archiveTime,
+      type: 'archive' as const,
+    });
+    archiveInfo = {
+      id: generateId(),
+      ticketId: id,
+      satisfaction: 'satisfied',
+      completionQuality: 'excellent',
+      issueTags: ['响应及时', '处理彻底', '材料完整'],
+      remark: '承办单位按期反馈，现场处置材料完整，群众回访结果良好。',
+      archivedBy: '督办员',
+      archiveTime,
+    };
+  }
+
   if (status === 'returned') {
     progressLogs.push({
       id: generateId(),
@@ -90,9 +133,9 @@ function createMockTicket(
     status,
     creator: '热线坐席员',
     handler: status !== 'pending' ? '张经办' : undefined,
-    result: status === 'completed' ? '已妥善处理群众反映的问题，相关情况如下：...' : undefined,
+    result: (status === 'completed' || status === 'archived') ? '已妥善处理群众反映的问题，相关情况如下：...' : undefined,
     progressLogs,
-    attachments: status === 'completed' ? [
+    attachments: (status === 'completed' || status === 'archived') ? [
       {
         id: generateId(),
         ticketId: id,
@@ -101,6 +144,7 @@ function createMockTicket(
         uploadTime: formatDate(addDays(assignTime, deadlineDays - 1)) + ' 16:40',
       },
     ] : [],
+    archiveInfo,
     urgeRecords: status === 'overdue' ? [
       {
         id: generateId(),
@@ -254,6 +298,28 @@ export const mockTickets: Ticket[] = [
     'completed',
     6,
     7
+  ),
+  createMockTicket(
+    'GD20240013',
+    '公园健身器材维修回访',
+    '城市管理',
+    '海淀区',
+    '市民反映公园内部分健身器材松动，老人使用时存在安全隐患，希望尽快检修。',
+    '城市管理委员会',
+    'archived',
+    18,
+    7
+  ),
+  createMockTicket(
+    'GD20240014',
+    '社区卫生服务预约优化建议',
+    '医疗卫生',
+    '通州区',
+    '市民建议社区卫生服务中心增加线上预约号源，减少现场排队时间。',
+    '卫生健康委员会',
+    'archived',
+    20,
+    10
   ),
 ];
 

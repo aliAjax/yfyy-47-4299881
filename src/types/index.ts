@@ -1,4 +1,4 @@
-export type TicketStatus = 'pending' | 'processing' | 'completed' | 'overdue' | 'returned';
+export type TicketStatus = 'pending' | 'processing' | 'completed' | 'overdue' | 'returned' | 'archived';
 
 export type TicketCategory = 
   | '城市管理' 
@@ -72,6 +72,21 @@ export interface ReturnRecord {
   createTime: string;
 }
 
+export type SatisfactionLevel = 'satisfied' | 'neutral' | 'unsatisfied';
+
+export type CompletionQuality = 'excellent' | 'qualified' | 'poor';
+
+export interface ArchiveReview {
+  id: string;
+  ticketId: string;
+  satisfaction: SatisfactionLevel;
+  completionQuality: CompletionQuality;
+  issueTags: string[];
+  remark: string;
+  archivedBy: string;
+  archiveTime: string;
+}
+
 export interface Ticket {
   id: string;
   title: string;
@@ -89,6 +104,7 @@ export interface Ticket {
   attachments: Attachment[];
   urgeRecords: UrgeRecord[];
   returnRecords: ReturnRecord[];
+  archiveInfo?: ArchiveReview;
   dispatchInfo?: DispatchInfo;
 }
 
@@ -117,6 +133,13 @@ export interface FilterOptions {
   deadlineRange: string;
 }
 
+export interface ArchiveFilterOptions {
+  handlerUnit: HandlerUnit | '';
+  category: TicketCategory | '';
+  satisfaction: SatisfactionLevel | '';
+  archiveTimeRange: '' | 'today' | '7days' | '30days' | '90days';
+}
+
 export type RiskLevel = 'high' | 'medium' | 'low';
 
 export const STATUS_LABELS: Record<TicketStatus, string> = {
@@ -125,7 +148,31 @@ export const STATUS_LABELS: Record<TicketStatus, string> = {
   completed: '已办结',
   overdue: '已超期',
   returned: '已退回',
+  archived: '已归档',
 };
+
+export const SATISFACTION_LABELS: Record<SatisfactionLevel, string> = {
+  satisfied: '满意',
+  neutral: '基本满意',
+  unsatisfied: '不满意',
+};
+
+export const COMPLETION_QUALITY_LABELS: Record<CompletionQuality, string> = {
+  excellent: '优秀',
+  qualified: '合格',
+  poor: '不合格',
+};
+
+export const ARCHIVE_ISSUE_TAGS = [
+  '响应及时',
+  '处理彻底',
+  '沟通充分',
+  '材料完整',
+  '答复不清',
+  '办理超期',
+  '群众重复反映',
+  '需专项跟进',
+];
 
 export const CATEGORIES: TicketCategory[] = [
   '城市管理',

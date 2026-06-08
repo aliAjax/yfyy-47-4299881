@@ -20,15 +20,23 @@ import {
   Phone,
   BadgeCheck,
   BookOpen,
-  Sparkles
+  Sparkles,
+  Archive,
+  Star
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { useContactStore } from '@/store/useContactStore';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timeline } from '@/components/Timeline';
+import { ArchiveReviewModal } from '@/components/ArchiveReviewModal';
 import { generateId, formatDateTime, formatFileSize } from '@/utils/date';
 import { useWorkday } from '@/hooks/useWorkday';
-import { Attachment, HandlerUnit } from '@/types';
+import {
+  Attachment,
+  COMPLETION_QUALITY_LABELS,
+  HandlerUnit,
+  SATISFACTION_LABELS,
+} from '@/types';
 import { getMatchReasonText } from '@/utils/dispatchRule';
 import { clsx } from 'clsx';
 
@@ -44,7 +52,8 @@ export default function TicketDetail() {
     updateTicketStatus,
     submitResult,
     urgeTicket,
-    returnTicket
+    returnTicket,
+    archiveTicket
   } = useTicketStore();
   const { getOnDutyContact, getContactsByUnit } = useContactStore();
   const { getRiskLevel, getDeadlineLabel } = useWorkday();
@@ -59,6 +68,7 @@ export default function TicketDetail() {
   const [showResultForm, setShowResultForm] = useState(false);
   const [showUrgeModal, setShowUrgeModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'timeline' | 'attachments'>('timeline');
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
   const [attachmentError, setAttachmentError] = useState('');
@@ -166,13 +176,19 @@ export default function TicketDetail() {
     setShowReturnModal(false);
   };
 
+  const handleArchive = (review: Parameters<typeof archiveTicket>[1]) => {
+    archiveTicket(ticket.id, review, '督办员');
+    setShowArchiveModal(false);
+  };
+
   const riskConfig = {
     high: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', label: '高风险' },
     medium: { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', label: '中风险' },
     low: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', label: '低风险' },
   };
 
-  const risk = riskConfig[ticket.status === 'completed' ? 'low' : riskLevel];
+  const isClosedTicket = ticket.status === 'completed' || ticket.status === 'archived';
+  const risk = riskConfig[isClosedTicket ? 'low' : riskLevel];
 
   return (
     <div className="space-y-6">
@@ -188,7 +204,7 @@ export default function TicketDetail() {
           </button>
         </div>
         
-        {currentRole === 'supervisor' && ticket.status !== 'completed' && (
+        {currentRole === 'supervisor' && ticket.status !== 'completed' && ticket.status !== 'archived' && (
           <div className="flex items-center space-x-3">
             <button
               onClick={() => setShowUrgeModal(true)}
@@ -205,6 +221,15 @@ export default function TicketDetail() {
               <span>退回重办</span>
             </button>
           </div>
+        )}
+        {currentRole === 'supervisor' && ticket.status === 'completed' && (
+          <button
+            onClick={() => setShowArchiveModal(true)}
+            className="inline-flex items-center space-x-2 rounded-lg border border-gray-300 bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+          >
+            <Archive className="h-4 w-4" />
+            <span>归档复盘</span>
+          </button>
         )}
       </div>
 
@@ -279,7 +304,7 @@ export default function TicketDetail() {
               </div>
 
               {/* Risk Badge */}
-              {ticket.status !== 'completed' && (
+              {!isClosedTicket && (
                 <div className={clsx(
                   'mt-6 flex items-center space-x-2 rounded-lg border px-4 py-2.5',
                   risk.bg,
@@ -311,11 +336,42 @@ export default function TicketDetail() {
                   </div>
                 </div>
               )}
+
+              {ticket.archiveInfo && (
+                <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="flex items-center text-sm font-medium text-gray-800">
+                      <Archive className="mr-2 h-4 w-4 text-gray-500" />
+                      归档信息
+                    </h3>
+                    <span className="text-xs text-gray-500">{ticket.archiveInfo.archiveTime}</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div>
+                      <p className="text-xs text-gray-500">满意度</p>
+                      <p className="mt-1 inline-flex items-center space-x-1 text-sm font-medium text-green-700">
+                        <Star className="h-3.5 w-3.5" />
+                        <span>{SATISFACTION_LABELS[ticket.archiveInfo.satisfaction]}</span>
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">办结质量</p>
+                      <p className="mt-1 text-sm font-medium text-gray-900">
+                        {COMPLETION_QUALITY_LABELS[ticket.archiveInfo.completionQuality]}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">归档人</p>
+                      <p className="mt-1 text-sm font-medium text-gray-900">{ticket.archiveInfo.archivedBy}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Handler Actions */}
-          {currentRole === 'handler' && ticket.status !== 'completed' && (
+          {currentRole === 'handler' && !isClosedTicket && (
             <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-6">
               <h3 className="text-base font-semibold text-gray-900 mb-4">办理操作</h3>
               
@@ -546,6 +602,40 @@ export default function TicketDetail() {
               )}
             </div>
           </div>
+
+          {ticket.archiveInfo && (
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex items-center space-x-2">
+                <Archive className="h-5 w-5 text-gray-500" />
+                <h3 className="text-sm font-semibold text-gray-900">复盘记录</h3>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <p className="mb-2 text-xs font-medium text-gray-500">问题标签</p>
+                  <div className="flex flex-wrap gap-2">
+                    {ticket.archiveInfo.issueTags.length > 0 ? (
+                      ticket.archiveInfo.issueTags.map(tag => (
+                        <span
+                          key={tag}
+                          className="rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700"
+                        >
+                          {tag}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm text-gray-400">未填写标签</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-medium text-gray-500">复盘备注</p>
+                  <p className="rounded-lg bg-gray-50 p-3 text-sm leading-relaxed text-gray-700">
+                    {ticket.archiveInfo.remark}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Contact Info */}
           <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
@@ -832,6 +922,14 @@ export default function TicketDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {showArchiveModal && (
+        <ArchiveReviewModal
+          ticketTitle={ticket.title}
+          onClose={() => setShowArchiveModal(false)}
+          onSubmit={handleArchive}
+        />
       )}
     </div>
   );

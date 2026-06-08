@@ -68,7 +68,8 @@ export function Timeline({ logs }: TimelineProps) {
                     log.type === 'urge' && 'text-red-700',
                     log.type === 'return' && 'text-orange-700',
                     log.type === 'complete' && 'text-green-700',
-                    !['urge', 'return', 'complete'].includes(log.type) && 'text-gray-900'
+                    log.type === 'archive' && 'text-gray-700',
+                    !['urge', 'return', 'complete', 'archive'].includes(log.type) && 'text-gray-900'
                   )}>
                     {log.content}
                   </p>
