@@ -1,4 +1,6 @@
-import { TicketCategory, Area, HandlerUnit, CATEGORIES, AREAS, HANDLER_UNITS } from '@/types';
+import { TicketCategory, Area, HandlerUnit, CATEGORIES, AREAS, HANDLER_UNITS, DispatchRecommendation, SLARecommendation, DispatchRule, SLARule } from '@/types';
+import { getDispatchRecommendation, getMatchReasonText } from './dispatchRule';
+import { getSLARecommendation, getSLAMatchReasonText } from './slaRule';
 
 export interface CsvRow {
   title: string;
@@ -7,6 +9,20 @@ export interface CsvRow {
   content: string;
   handlerUnit: string;
   deadline: string;
+}
+
+export interface RowRecommendation {
+  dispatchRecommendation: DispatchRecommendation | null;
+  slaRecommendation: SLARecommendation | null;
+  recommendedHandlerUnit: HandlerUnit | null;
+  recommendedDeadlineDays: number;
+  matchReasons: string[];
+  hasConflict: boolean;
+  conflictReason?: string;
+}
+
+export interface CsvRowWithRecommendation extends CsvRow {
+  recommendation?: RowRecommendation;
 }
 
 export interface CsvValidationError {
@@ -299,4 +315,55 @@ export function getErrorSummary(errors: CsvValidationError[]): { missingCount: n
   const fields = [...new Set(errors.map(e => e.field))];
   
   return { missingCount, invalidCount, fields };
+}
+
+export function calculateRowRecommendations(
+  rows: CsvRow[],
+  dispatchRules: DispatchRule[],
+  slaRules: SLARule[]
+): CsvRowWithRecommendation[] {
+  return rows.map(row => {
+    const category = (row.category.trim() as TicketCategory) || '';
+    const area = (row.area.trim() as Area) || '';
+    const handlerUnit = (row.handlerUnit.trim() as HandlerUnit) || '';
+
+    const dispatchRec = getDispatchRecommendation(dispatchRules, {
+      title: row.title,
+      content: row.content,
+      category,
+      area,
+    });
+
+    const effectiveHandlerUnit = dispatchRec.handlerUnit || handlerUnit;
+
+    const slaRec = getSLARecommendation(slaRules, {
+      category,
+      handlerUnit: effectiveHandlerUnit,
+    });
+
+    const recommendedDeadlineDays = slaRec.deadlineDays ?? dispatchRec.deadlineDays ?? 7;
+
+    const matchReasons: string[] = [];
+    if (dispatchRec.matchedRules.length > 0) {
+      const topDispatch = dispatchRec.matchedRules[0];
+      matchReasons.push(`分派规则：${getMatchReasonText(topDispatch)}`);
+    }
+    if (slaRec.matchedRules.length > 0) {
+      const topSla = slaRec.matchedRules[0];
+      matchReasons.push(`SLA规则：${getSLAMatchReasonText(topSla)}`);
+    }
+
+    return {
+      ...row,
+      recommendation: {
+        dispatchRecommendation: dispatchRec,
+        slaRecommendation: slaRec,
+        recommendedHandlerUnit: dispatchRec.handlerUnit,
+        recommendedDeadlineDays,
+        matchReasons,
+        hasConflict: dispatchRec.hasConflict,
+        conflictReason: dispatchRec.conflictReason,
+      },
+    };
+  });
 }

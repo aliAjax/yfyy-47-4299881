@@ -11,7 +11,8 @@ import {
   AlertCircle,
   Info,
   Monitor,
-  ExternalLink
+  ExternalLink,
+  Users
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -25,7 +26,7 @@ const VALID_TABS: TabType[] = ['risk', 'pendingUrge', 'urge', 'return'];
 export default function Supervision() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { getRiskTickets, getUrgeRecords, getReturnRecords, getSupervisorTodoTickets, tickets } = useTicketStore();
+  const { getRiskTickets, getUrgeRecords, getReturnRecords, getSupervisorTodoTickets, tickets, isCoOrganizing } = useTicketStore();
   const { getDeadlineLabel, getWorkdaysRemaining: getDaysRemaining } = useWorkday();
   
   const tabFromUrl = searchParams.get('tab') as TabType | null;
@@ -199,7 +200,17 @@ export default function Supervision() {
                             onClick={() => navigate(`/tickets/${ticket.id}`)}
                           >
                             <td className="px-4 py-3 text-sm font-mono text-red-600 font-medium">{ticket.id}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">{ticket.title}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-sm text-gray-900 max-w-xs truncate">{ticket.title}</span>
+                                {isCoOrganizing(ticket) && (
+                                  <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0">
+                                    <Users className="h-3 w-3" />
+                                    <span>协办中</span>
+                                  </span>
+                                )}
+                              </div>
+                            </td>
                             <td className="px-4 py-3 text-sm text-gray-600">{ticket.handlerUnit}</td>
                             <td className="px-4 py-3 text-sm text-red-600 font-medium">
                               {getDeadlineLabel(ticket.deadline, ticket.status)}
@@ -250,7 +261,17 @@ export default function Supervision() {
                             onClick={() => navigate(`/tickets/${ticket.id}`)}
                           >
                             <td className="px-4 py-3 text-sm font-mono text-orange-600 font-medium">{ticket.id}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">{ticket.title}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-sm text-gray-900 max-w-xs truncate">{ticket.title}</span>
+                                {isCoOrganizing(ticket) && (
+                                  <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0">
+                                    <Users className="h-3 w-3" />
+                                    <span>协办中</span>
+                                  </span>
+                                )}
+                              </div>
+                            </td>
                             <td className="px-4 py-3 text-sm text-gray-600">{ticket.handlerUnit}</td>
                             <td className="px-4 py-3 text-sm text-orange-600 font-medium">
                               {getDeadlineLabel(ticket.deadline, ticket.status)}
@@ -301,7 +322,17 @@ export default function Supervision() {
                           onClick={() => navigate(`/tickets/${ticket.id}`)}
                         >
                           <td className="px-4 py-3 text-sm font-mono text-orange-600 font-medium">{ticket.id}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">{ticket.title}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm text-gray-900 max-w-xs truncate">{ticket.title}</span>
+                              {isCoOrganizing(ticket) && (
+                                <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0">
+                                  <Users className="h-3 w-3" />
+                                  <span>协办中</span>
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td className="px-4 py-3 text-sm text-gray-600">{ticket.handlerUnit}</td>
                           <td className="px-4 py-3 text-sm text-orange-600 font-medium">
                             {getDeadlineLabel(ticket.deadline, ticket.status)}

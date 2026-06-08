@@ -1,20 +1,54 @@
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles } from 'lucide-react';
+import { Clock, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles, Users } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { StatsCard } from '@/components/StatsCard';
 import { FilterBar } from '@/components/FilterBar';
+import { FilterViewSelector } from '@/components/FilterViewSelector';
 import { StatusBadge } from '@/components/StatusBadge';
-import { Ticket } from '@/types';
+import { Ticket, FilterOptions } from '@/types';
 import { useWorkday } from '@/hooks/useWorkday';
+import { useFilterViews } from '@/hooks/useFilterViews';
 import { clsx } from 'clsx';
+
+function isFilterEqual(a: FilterOptions, b: FilterOptions): boolean {
+  return (
+    a.status === b.status &&
+    a.area === b.area &&
+    a.handlerUnit === b.handlerUnit &&
+    a.category === b.category &&
+    a.deadlineRange === b.deadlineRange &&
+    a.hasCoOrganizer === b.hasCoOrganizer
+  );
+}
 
 export default function TicketList() {
   const navigate = useNavigate();
-  const { getFilteredTickets, getTicketStats, setFilterOptions } = useTicketStore();
+  const { getFilteredTickets, getTicketStats, setFilterOptions, filterOptions, isCoOrganizing, getTicketRole, currentRole, currentUnit } = useTicketStore();
   const { getDeadlineLabel, getRiskLevel } = useWorkday();
-  
+  const { views } = useFilterViews();
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const isApplyingViewRef = useRef(false);
+
   const tickets = getFilteredTickets();
   const stats = getTicketStats();
+
+  useEffect(() => {
+    if (isApplyingViewRef.current) {
+      isApplyingViewRef.current = false;
+      return;
+    }
+    if (!activeViewId) return;
+    const activeView = views.find(v => v.id === activeViewId);
+    if (activeView && !isFilterEqual(filterOptions, activeView.filterOptions)) {
+      setActiveViewId(null);
+    }
+  }, [filterOptions, activeViewId, views]);
+
+  const handleApplyView = (viewFilterOptions: FilterOptions) => {
+    isApplyingViewRef.current = true;
+    setFilterOptions(viewFilterOptions);
+  };
 
   const handleStatClick = (status: string) => {
     if (status === 'overdue') {
@@ -65,6 +99,14 @@ export default function TicketList() {
           onClick={() => handleStatClick('overdue')}
         />
       </div>
+
+      {/* Filter View Selector */}
+      <FilterViewSelector
+        currentFilter={filterOptions}
+        activeViewId={activeViewId}
+        onApplyView={handleApplyView}
+        onActiveViewChange={setActiveViewId}
+      />
 
       {/* Filter Bar */}
       <FilterBar />
@@ -128,6 +170,32 @@ export default function TicketList() {
                         <p className="text-sm font-medium text-gray-900 max-w-xs truncate">
                           {ticket.title}
                         </p>
+                        {currentRole === 'handler' && currentUnit && getTicketRole(ticket, currentUnit) === 'coorganizer' && (
+                          <span
+                            className="inline-flex items-center px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 text-xs font-medium flex-shrink-0"
+                            title="您是协办单位"
+                          >
+                            <Users className="h-3 w-3 mr-0.5" />
+                            <span>协办</span>
+                          </span>
+                        )}
+                        {currentRole === 'handler' && currentUnit && getTicketRole(ticket, currentUnit) === 'main' && (
+                          <span
+                            className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-xs font-medium flex-shrink-0"
+                            title="您是主办单位"
+                          >
+                            <span>主办</span>
+                          </span>
+                        )}
+                        {isCoOrganizing(ticket) && (
+                          <span
+                            className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0"
+                            title="协办中"
+                          >
+                            <Users className="h-3 w-3" />
+                            <span>协办中</span>
+                          </span>
+                        )}
                         {ticket.dispatchInfo?.dispatchMethod && ticket.dispatchInfo.dispatchMethod !== 'manual' && (
                           <span
                             className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-violet-50 text-violet-600 text-xs font-medium flex-shrink-0"

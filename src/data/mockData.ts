@@ -1,4 +1,4 @@
-import { Ticket, TicketCategory, Area, HandlerUnit, ProgressLog, ContactPerson, DispatchRule, HolidayConfig, SLARule } from '@/types';
+import { Ticket, TicketCategory, Area, HandlerUnit, ProgressLog, ContactPerson, DispatchRule, HolidayConfig, SLARule, ArchiveInfo, SatisfactionLevel, QualityLevel, ProblemTag, KnowledgeEntry, CoOrganizer, CoOrgProgressLog } from '@/types';
 import { addDays, formatDate, generateId, formatDateTime } from '@/utils/date';
 
 const now = new Date();
@@ -78,6 +78,44 @@ function createMockTicket(
     });
   }
 
+  let archiveInfo: ArchiveInfo | undefined;
+  if (status === 'archived') {
+    const archiveDate = addDays(assignTime, deadlineDays + 1);
+    const satisfaction: SatisfactionLevel = 'satisfied';
+    const quality: QualityLevel = 'good';
+    const problemTags: ProblemTag[] = ['响应及时', '处理专业', '结果满意'];
+    
+    archiveInfo = {
+      id: generateId(),
+      ticketId: id,
+      satisfaction,
+      quality,
+      problemTags,
+      reviewNote: '该工单办理及时，处理专业，群众满意度高。建议总结经验，形成标准化处理流程。',
+      operator: '李督办',
+      archiveTime: formatDate(archiveDate) + ' 10:30',
+    };
+    
+    progressLogs.push({
+      id: generateId(),
+      ticketId: id,
+      content: '已完成办理，提交办理结果',
+      operator: '承办单位经办人',
+      createTime: formatDate(addDays(assignTime, deadlineDays - 1)) + ' 16:45',
+      type: 'complete' as const,
+    });
+    progressLogs.push({
+      id: generateId(),
+      ticketId: id,
+      content: `【归档复盘】工单已归档，满意度：${satisfaction}，办结质量：${quality}`,
+      operator: '李督办',
+      createTime: formatDate(archiveDate) + ' 10:30',
+      type: 'archive' as const,
+    });
+  }
+
+  const isCompletedOrArchived = status === 'completed' || status === 'archived';
+
   return {
     id,
     title,
@@ -90,9 +128,9 @@ function createMockTicket(
     status,
     creator: '热线坐席员',
     handler: status !== 'pending' ? '张经办' : undefined,
-    result: status === 'completed' ? '已妥善处理群众反映的问题，相关情况如下：...' : undefined,
+    result: isCompletedOrArchived ? '已妥善处理群众反映的问题，相关情况如下：...' : undefined,
     progressLogs,
-    attachments: status === 'completed' ? [
+    attachments: isCompletedOrArchived ? [
       {
         id: generateId(),
         ticketId: id,
@@ -119,6 +157,8 @@ function createMockTicket(
         createTime: formatDate(addDays(assignTime, 3)) + ' 09:15',
       },
     ] : [],
+    coOrganizers: [],
+    archiveInfo,
   };
 }
 
@@ -255,7 +295,218 @@ export const mockTickets: Ticket[] = [
     6,
     7
   ),
+  createMockTicket(
+    'GD20240013',
+    '社区健身器材损坏问题',
+    '城市管理',
+    '朝阳区',
+    '朝阳区某社区健身器材损坏严重，存在安全隐患，希望及时维修更换。',
+    '城市管理委员会',
+    'archived',
+    20,
+    7
+  ),
+  createMockTicket(
+    'GD20240014',
+    '公交线路优化建议',
+    '交通运输',
+    '海淀区',
+    '海淀区中关村地区公交线路覆盖不足，建议增加班次或优化线路。',
+    '交通委员会',
+    'archived',
+    35,
+    15
+  ),
+  createMockTicket(
+    'GD20240015',
+    '老旧小区电梯改造申请',
+    '住房建设',
+    '东城区',
+    '东城区某老旧小区没有电梯，老人上下楼不便，希望能加装电梯。',
+    '住房和城乡建设委员会',
+    'archived',
+    50,
+    30
+  ),
+  createMockTicket(
+    'GD20240016',
+    '校园周边食品安全问题',
+    '市场监管',
+    '丰台区',
+    '丰台区某小学周边小卖部售卖三无食品，影响学生健康。',
+    '市场监督管理局',
+    'archived',
+    15,
+    5
+  ),
+  createMockTicket(
+    'GD20240017',
+    '医保报销流程繁琐问题',
+    '劳动社保',
+    '通州区',
+    '通州区医保报销流程繁琐，需要提交很多材料，建议简化流程。',
+    '人力资源和社会保障局',
+    'archived',
+    45,
+    10
+  ),
 ];
+
+function enrichArchivedTickets(tickets: Ticket[]): Ticket[] {
+  const archivedConfigs: Record<string, Partial<ArchiveInfo> & { reviewNote: string }> = {
+    'GD20240013': {
+      satisfaction: 'very_satisfied',
+      quality: 'excellent',
+      problemTags: ['响应及时', '处理专业', '结果满意', '服务态度好'],
+      reviewNote: '该工单响应迅速，24小时内完成维修。处理过程专业规范，群众反馈非常满意。建议作为典型案例推广。',
+    },
+    'GD20240014': {
+      satisfaction: 'satisfied',
+      quality: 'good',
+      problemTags: ['沟通顺畅', '结果满意'],
+      reviewNote: '公交线路优化建议已纳入下季度规划，已与群众沟通并取得理解。整体办理质量良好。',
+    },
+    'GD20240015': {
+      satisfaction: 'neutral',
+      quality: 'average',
+      problemTags: ['办理时间长', '流程繁琐', '需要改进'],
+      reviewNote: '老旧小区电梯改造涉及多方协调，办理周期较长。群众表示理解但希望能加快进度。建议优化跨部门协作流程。',
+    },
+    'GD20240016': {
+      satisfaction: 'very_satisfied',
+      quality: 'excellent',
+      problemTags: ['响应及时', '处理专业', '结果满意', '服务态度好', '沟通顺畅'],
+      reviewNote: '食品安全问题处理迅速，执法到位，有效保障了学生饮食安全。群众满意度很高，值得表扬。',
+    },
+    'GD20240017': {
+      satisfaction: 'dissatisfied',
+      quality: 'poor',
+      problemTags: ['办理时间长', '流程繁琐', '结果不理想', '沟通不畅'],
+      reviewNote: '医保报销流程优化涉及政策调整，短期内难以解决。群众不太满意，需要持续跟进并做好解释工作。',
+    },
+  };
+
+  return tickets.map(ticket => {
+    if (ticket.status !== 'archived' || !ticket.archiveInfo) return ticket;
+    
+    const config = archivedConfigs[ticket.id];
+    if (!config) return ticket;
+
+    const newArchiveInfo: ArchiveInfo = {
+      ...ticket.archiveInfo,
+      satisfaction: config.satisfaction as SatisfactionLevel,
+      quality: config.quality as QualityLevel,
+      problemTags: config.problemTags as ProblemTag[],
+      reviewNote: config.reviewNote,
+    };
+
+    return {
+      ...ticket,
+      archiveInfo: newArchiveInfo,
+      progressLogs: ticket.progressLogs.map(log => {
+        if (log.type === 'archive') {
+          return {
+            ...log,
+            content: `【归档复盘】工单已归档，满意度：${config.satisfaction}，办结质量：${config.quality}`,
+          };
+        }
+        return log;
+      }),
+    };
+  });
+}
+
+function enrichCoOrganizerTickets(tickets: Ticket[]): Ticket[] {
+  const coOrgConfigs: Record<string, CoOrganizer[]> = {
+    'GD20240005': [
+      {
+        id: generateId() + '-co1',
+        ticketId: 'GD20240005',
+        unit: '交通委员会',
+        status: 'processing',
+        requirement: '请协助制定校园周边交通疏导方案，优化上下学时段交通组织',
+        deadline: formatDate(addDays(new Date(), 3)),
+        assignee: '赵晓峰',
+        progressLogs: [
+          {
+            id: generateId() + '-log1',
+            coOrganizerId: '',
+            ticketId: 'GD20240005',
+            content: '已派员现场勘查校园周边交通状况，正在制定疏导方案',
+            operator: '交通委员会经办人',
+            createTime: formatDate(addDays(new Date(), -1)) + ' 10:30',
+          },
+        ],
+        assignTime: formatDate(addDays(new Date(), -2)) + ' 09:00',
+      },
+      {
+        id: generateId() + '-co2',
+        ticketId: 'GD20240005',
+        unit: '城市管理委员会',
+        status: 'completed',
+        requirement: '请协助清理校园周边占道经营和违规停车',
+        deadline: formatDate(addDays(new Date(), 5)),
+        assignee: '王大勇',
+        result: '已完成校园周边占道经营清理，查处违规停车23起，设置临时禁停标志',
+        progressLogs: [
+          {
+            id: generateId() + '-log2',
+            coOrganizerId: '',
+            ticketId: 'GD20240005',
+            content: '已开展校园周边环境整治行动，清理占道经营',
+            operator: '城管委经办人',
+            createTime: formatDate(addDays(new Date(), -3)) + ' 14:00',
+          },
+        ],
+        assignTime: formatDate(addDays(new Date(), -4)) + ' 11:00',
+        completeTime: formatDate(addDays(new Date(), -1)) + ' 16:30',
+      },
+    ],
+    'GD20240001': [
+      {
+        id: generateId() + '-co3',
+        ticketId: 'GD20240001',
+        unit: '住房和城乡建设委员会',
+        status: 'pending',
+        requirement: '请协助确认该路段路灯产权归属和维护责任',
+        deadline: formatDate(addDays(new Date(), 2)),
+        progressLogs: [],
+        assignTime: formatDate(addDays(new Date(), -1)) + ' 15:00',
+      },
+    ],
+  };
+
+  return tickets.map(ticket => {
+    const config = coOrgConfigs[ticket.id];
+    if (!config) return ticket;
+    
+    const coOrganizers = config.map(co => ({
+      ...co,
+      progressLogs: co.progressLogs.map(log => ({
+        ...log,
+        coOrganizerId: co.id,
+      })),
+    }));
+
+    const additionalLogs: ProgressLog[] = coOrganizers.map(co => ({
+      id: generateId() + '-mainlog',
+      ticketId: ticket.id,
+      content: `【发起协办】已将工单协办至${co.unit}，协办要求：${co.requirement}`,
+      operator: '督办员',
+      createTime: co.assignTime,
+      type: 'coorg_assign' as const,
+    }));
+
+    return {
+      ...ticket,
+      coOrganizers,
+      progressLogs: [...ticket.progressLogs, ...additionalLogs],
+    };
+  });
+}
+
+mockTickets.splice(0, mockTickets.length, ...enrichArchivedTickets(mockTickets));
+mockTickets.splice(0, mockTickets.length, ...enrichCoOrganizerTickets(mockTickets));
 
 function createMockContact(
   unit: HandlerUnit,
@@ -650,5 +901,169 @@ export const mockSLARules: SLARule[] = [
     7,
     0,
     '默认办理期限，7个工作日'
+  ),
+];
+
+function createMockKnowledge(
+  title: string,
+  category: TicketCategory | '',
+  keywords: string[],
+  synonyms: string[],
+  recommendedUnit: HandlerUnit,
+  replyTemplate: string,
+  keyPoints: string,
+  useCount: number = 0,
+  enabled: boolean = true
+): KnowledgeEntry {
+  const nowStr = formatDateTime(new Date());
+  return {
+    id: generateId(),
+    title,
+    category,
+    keywords,
+    synonyms,
+    recommendedUnit,
+    replyTemplate,
+    keyPoints,
+    enabled,
+    useCount,
+    createTime: nowStr,
+    updateTime: nowStr,
+    lastUsedTime: useCount > 0 ? nowStr : undefined,
+  };
+}
+
+export const mockKnowledgeEntries: KnowledgeEntry[] = [
+  createMockKnowledge(
+    '路灯损坏投诉处理',
+    '城市管理',
+    ['路灯', '照明', '灯不亮', '路灯损坏', '夜间照明'],
+    ['路灯坏了', '灯不亮了', '路灯不亮', '街灯', '路灯维修', '路灯故障'],
+    '城市管理委员会',
+    '您好，关于您反映的路灯损坏问题，我们已安排工作人员现场核实，具体处理情况如下：\n\n一、核实情况\n经现场勘查，您反映的路段确实存在路灯损坏现象，具体位置为{area}XX路XX号附近，共涉及X盏路灯。\n\n二、处理措施\n1. 已将该问题纳入维修计划，预计3个工作日内完成修复；\n2. 安排专人对该路段进行夜间巡查，确保居民出行安全；\n3. 维修完成后将第一时间反馈。\n\n三、后续跟进\n我们将持续关注该路段路灯运行情况，如您有其他问题，欢迎随时联系我们。感谢您对城市管理工作的监督与支持！',
+    '1. 需现场核实具体位置和损坏数量；2. 一般3个工作日内修复；3. 修复后需反馈；4. 涉及安全隐患的需加急处理',
+    128,
+    true
+  ),
+  createMockKnowledge(
+    '道路坑洼投诉处理',
+    '城市管理',
+    ['道路', '坑洼', '积水', '路面', '井盖', '道路损坏'],
+    ['路不平', '路坏了', '路面破损', '道路破损', '坑坑洼洼', '道路塌陷'],
+    '城市管理委员会',
+    '您好，关于您反映的道路坑洼问题，我们已安排道路养护部门现场核查，处理情况如下：\n\n一、问题核实\n经现场勘查，您反映的{area}XX路段确实存在路面坑洼问题，坑洼面积约XX平方米，主要原因为车辆长期碾压及雨水冲刷。\n\n二、处理方案\n1. 立即在坑洼周边设置警示标志，提醒过往车辆注意安全；\n2. 制定路面修复方案，预计7个工作日内完成修复；\n3. 修复后进行质量验收，确保修复效果。\n\n三、温馨提示\n请过往车辆和行人注意避让，注意安全。感谢您对城市道路管理工作的关心与支持！',
+    '1. 需设置警示标志确保安全；2. 一般7个工作日内修复；3. 涉及主干道的优先处理；4. 修复后需质量验收',
+    96,
+    true
+  ),
+  createMockKnowledge(
+    '公交候车亭破损处理',
+    '交通运输',
+    ['公交', '公交车', '公交站', '候车亭', '站牌', '公交设施'],
+    ['公交车站', '公交站台', '公交站牌', '候车亭坏了', '公交候车', '公共汽车'],
+    '交通委员会',
+    '您好，关于您反映的公交候车亭破损问题，我们已安排相关单位现场核实，处理情况如下：\n\n一、核实情况\n经现场查看，您反映的XX公交站候车亭确实存在玻璃破损/座椅损坏问题，影响市民候车体验。\n\n二、处理措施\n1. 已通知公交设施维护单位尽快维修，预计5个工作日内完成修复；\n2. 对破损部位采取临时防护措施，避免伤及乘客；\n3. 对全市公交候车亭进行全面排查，及时发现并处理类似问题。\n\n感谢您对公共交通事业的关注与监督！',
+    '1. 需先核实破损情况和位置；2. 一般5个工作日内修复；3. 涉及安全的需设置防护；4. 修复后及时反馈',
+    54,
+    true
+  ),
+  createMockKnowledge(
+    '物业管理投诉处理',
+    '住房建设',
+    ['物业', '物业管理', '小区物业', '物业服务', '物业投诉'],
+    ['物业公司', '小区管理', '物业差', '物业不好', '物业纠纷', '业主投诉'],
+    '住房和城乡建设委员会',
+    '您好，关于您反映的小区物业管理问题，我们已安排工作人员与物业公司对接，核实处理情况如下：\n\n一、问题核实\n经向物业公司了解，您反映的XX问题情况属实，物业公司存在服务不到位的情况。\n\n二、处理措施\n1. 已要求物业公司限期整改，整改期限为X个工作日；\n2. 安排专人跟进整改进度，确保整改落实到位；\n3. 整改完成后将对整改效果进行复查。\n\n三、法律依据\n根据《物业管理条例》相关规定，物业公司应当按照物业服务合同约定提供相应服务。如物业公司服务质量持续不达标，业主可通过业主大会决定更换物业公司。\n\n感谢您对物业管理工作的监督！',
+    '1. 需核实物业服务合同约定；2. 先要求物业限期整改；3. 整改期限一般7-15个工作日；4. 可引导业主通过业主大会维权',
+    156,
+    true
+  ),
+  createMockKnowledge(
+    '社保缴费查询问题处理',
+    '劳动社保',
+    ['社保', '养老保险', '医疗保险', '缴费', '社保查询', '社保记录'],
+    ['社会保险', '养老金', '医保', '社保怎么查', '社保缴费记录', '五险一金'],
+    '人力资源和社会保障局',
+    '您好，关于您咨询的社保缴费查询问题，现答复如下：\n\n一、查询方式\n1. 线上查询：可通过"社保APP"或"人社服务"微信公众号，注册登录后查询个人缴费记录；\n2. 线下查询：携带本人身份证到就近的社保经办机构服务大厅查询；\n3. 电话查询：拨打12333社保服务热线查询。\n\n二、常见问题\n1. 如查询不到近期缴费记录，可能是单位尚未缴费或缴费信息未及时同步，建议稍后再试；\n2. 如发现缴费记录有误，可携带相关证明材料到社保经办机构申请核实更正。\n\n三、温馨提示\n建议您定期查询社保缴费情况，确保缴费记录完整准确。如有其他问题，欢迎拨打12333热线咨询。',
+    '1. 提供线上线下多种查询方式；2. 记录同步可能有延迟；3. 信息有误需携带证明材料更正；4. 引导使用官方渠道',
+    203,
+    true
+  ),
+  createMockKnowledge(
+    '学校周边交通拥堵问题',
+    '教育文化',
+    ['学校', '小学', '中学', '校园', '学生安全', '交通拥堵', '校门口'],
+    ['上学堵', '放学堵', '学校门口', '接送孩子', '校园周边', '学生安全'],
+    '教育委员会',
+    '您好，关于您反映的学校周边交通拥堵问题，我们已协调相关部门研究处理，具体措施如下：\n\n一、已采取措施\n1. 协调交管部门在上下学高峰期加派警力，维护校门口交通秩序；\n2. 要求学校优化上下学接送方案，实行错峰放学；\n3. 设置临时接送区域，引导家长规范停车。\n\n二、长期规划\n1. 协调规划部门研究学校周边交通优化方案；\n2. 探索增设校园周边人行天桥或地下通道的可行性；\n3. 加强学生交通安全教育，鼓励绿色出行。\n\n感谢您对教育事业的关心和支持！',
+    '1. 需协调交管、规划等多部门；2. 短期措施+长期规划结合；3. 引导错峰和绿色出行；4. 涉及学生安全要重视',
+    78,
+    true
+  ),
+  createMockKnowledge(
+    '医院挂号难问题处理',
+    '医疗卫生',
+    ['医院', '挂号', '排队', '预约', '看病难', '挂号难'],
+    ['医院挂号', '预约挂号', '排队挂号', '医院排队', '看病挂号', '预约难'],
+    '卫生健康委员会',
+    '您好，关于您反映的医院挂号难问题，我们已向相关医院了解情况，现答复如下：\n\n一、预约挂号方式\n1. 线上预约：可通过医院官方APP、微信公众号、114预约挂号平台等渠道提前预约；\n2. 电话预约：拨打医院预约电话或114进行预约；\n3. 现场挂号：医院设有自助挂号机和人工挂号窗口。\n\n二、缓解措施\n1. 医院已推行分时段预约诊疗，建议您选择非高峰时段就诊；\n2. 部分科室开设了夜间门诊和周末门诊，可错峰就医；\n3. 常见小病建议先到社区卫生服务中心就诊，实行分级诊疗。\n\n三、温馨提示\n建议您提前预约，按预约时间就诊，减少排队等待时间。感谢您对医疗卫生工作的理解与支持！',
+    '1. 提供多种预约挂号方式；2. 引导错峰就诊和分级诊疗；3. 推广线上预约；4. 解释挂号难的客观原因',
+    145,
+    true
+  ),
+  createMockKnowledge(
+    '噪音扰民投诉处理',
+    '环境保护',
+    ['噪音', '噪声', '扰民', '施工噪音', '夜间施工', '噪音污染'],
+    ['太吵了', '声音大', '噪声污染', '扰民噪音', '晚上吵', '噪音举报'],
+    '生态环境局',
+    '您好，关于您反映的噪音扰民问题，我们已安排环境执法人员现场查处，处理情况如下：\n\n一、现场检查\n执法人员于XX年XX月XX日XX时到现场检查，经查，XX单位（工地）在XX时段施工作业，产生噪声扰民情况属实。\n\n二、处理措施\n1. 现场责令该单位（工地）立即停止夜间违规施工行为；\n2. 依据《环境噪声污染防治法》相关规定，对该单位作出行政处罚；\n3. 要求该单位合理安排施工时间，严格遵守夜间施工规定。\n\n三、后续监管\n我们将加强对该区域的夜间巡查力度，发现问题及时查处。如您再次发现噪音扰民问题，欢迎拨打12369环保举报热线。\n\n感谢您对环境保护工作的监督与支持！',
+    '1. 需现场检查取证；2. 夜间施工（22:00-6:00）需审批；3. 可依法行政处罚；4. 加强后续巡查',
+    189,
+    true
+  ),
+  createMockKnowledge(
+    '食品安全投诉处理',
+    '市场监管',
+    ['食品', '餐厅', '卫生', '食品安全', '变质', '过期', '三无食品'],
+    ['食品卫生', '吃饭拉肚子', '食品变质', '食品过期', '餐厅卫生', '食品问题'],
+    '市场监督管理局',
+    '您好，关于您反映的食品安全问题，我们已安排执法人员调查处理，情况如下：\n\n一、调查情况\n执法人员对您反映的XX餐厅（商家）进行了现场检查，重点检查了食品原材料、加工过程、从业人员健康证等方面。\n\n二、处理措施\n1. 对检查中发现的问题，当场责令商家限期整改；\n2. 对涉嫌违法违规行为，依法立案查处；\n3. 对问题食品进行抽样送检，根据检验结果作出进一步处理。\n\n三、消费提示\n外出就餐时，请注意选择持有《食品经营许可证》、卫生条件好的餐厅；购买食品时，注意查看生产日期、保质期和QS标志。如发现食品安全问题，请保存好相关证据，及时拨打12315投诉举报。\n\n感谢您对食品安全工作的监督！',
+    '1. 需现场检查和抽样取证；2. 责令整改+行政处罚结合；3. 引导消费者保存证据；4. 涉及食品安全优先处理',
+    112,
+    true
+  ),
+  createMockKnowledge(
+    '价格欺诈投诉处理',
+    '市场监管',
+    ['价格', '标价', '欺诈', '超市', '涨价', '乱收费', '价格欺诈'],
+    ['价格问题', '乱涨价', '价格欺骗', '标价不符', '收费不合理', '价格投诉'],
+    '市场监督管理局',
+    '您好，关于您反映的价格问题，我们已安排执法人员调查核实，处理情况如下：\n\n一、核实情况\n经调查，您反映的XX商家（超市）确实存在标价与结算价格不一致/乱收费的情况，违反了《价格法》相关规定。\n\n二、处理措施\n1. 责令商家立即整改，明码标价，退还多收款项；\n2. 依据《价格法》和《价格违法行为行政处罚规定》，对商家作出行政处罚；\n3. 要求商家加强价格管理，杜绝类似问题再次发生。\n\n三、消费者维权提示\n1. 购物时注意查看商品标价，保留好购物凭证；\n2. 如发现价格问题，可先与商家协商解决；\n3. 协商不成的，可拨打12315热线向市场监管部门投诉。\n\n感谢您对价格监管工作的监督与支持！',
+    '1. 需核实标价与结算价是否一致；2. 责令整改+退款+处罚；3. 引导消费者保留凭证；4. 按价格法处理',
+    87,
+    true
+  ),
+  createMockKnowledge(
+    '房屋漏水维修问题',
+    '住房建设',
+    ['房屋漏水', '维修', '老小区', '房屋修缮', '漏雨', '渗水'],
+    ['房顶漏水', '天花板漏水', '墙面渗水', '房子漏水', '房屋漏雨', '防水'],
+    '住房和城乡建设委员会',
+    '您好，关于您反映的房屋漏水问题，现答复如下：\n\n一、维修责任划分\n1. 保修期内（一般屋面防水5年）的房屋漏水，由建设单位负责维修；\n2. 超过保修期的，如属于公共部位，可申请使用住宅专项维修资金；\n3. 如属于业主专有部分，由业主自行负责维修。\n\n二、处理建议\n1. 请先确认房屋是否在保修期内，如在保修期内，可联系开发商或物业公司安排维修；\n2. 如已过保修期且属于公共部位，可向业主委员会或物业公司提出使用维修资金申请；\n3. 紧急情况下，可先行维修，保留好相关票据和证据，再按规定报销。\n\n三、温馨提示\n建议您平时注意维护房屋，发现问题及时处理，避免损失扩大。如有其他问题，欢迎继续咨询。',
+    '1. 先划分保修责任；2. 区分公共部位和专有部位；3. 引导走维修资金渠道；4. 紧急情况可先修后报',
+    134,
+    true
+  ),
+  createMockKnowledge(
+    '医保报销问题解答',
+    '劳动社保',
+    ['医保', '医疗保险', '报销', '医保报销', '医疗费用', '医保政策'],
+    ['医保怎么报', '医疗报销', '看病报销', '医保比例', '医保政策', '医疗保险报销'],
+    '人力资源和社会保障局',
+    '您好，关于您咨询的医保报销问题，现答复如下：\n\n一、医保报销范围\n1. 参保人员在定点医疗机构发生的符合医保目录内的医疗费用，可按规定报销；\n2. 门诊、住院、门诊慢特病等都有相应的报销政策。\n\n二、报销比例\n1. 门诊报销：统筹基金支付比例一般为50%-70%；\n2. 住院报销：根据医院级别不同，报销比例一般为70%-90%；\n3. 具体报销比例以当地医保政策为准。\n\n三、报销流程\n1. 持社保卡在定点医疗机构就医，可直接刷卡结算；\n2. 如因故未能直接结算，可携带相关材料到医保经办机构手工报销。\n\n四、咨询渠道\n1. 拨打12333社保服务热线咨询；\n2. 登录医保局官网或微信公众号查询；\n3. 到就近的医保经办机构窗口咨询。\n\n感谢您的咨询，祝您身体健康！',
+    '1. 区分门诊、住院报销政策；2. 强调定点医疗机构；3. 提供多种咨询渠道；4. 引导持卡直接结算',
+    176,
+    true
   ),
 ];

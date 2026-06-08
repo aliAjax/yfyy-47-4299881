@@ -6,7 +6,10 @@ import {
   CheckCircle2, 
   AlertTriangle, 
   RotateCcw,
-  Archive
+  Archive,
+  Users,
+  MessageSquare,
+  CheckSquare
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -22,6 +25,9 @@ const iconMap = {
   urge: AlertTriangle,
   return: RotateCcw,
   archive: Archive,
+  coorg_assign: Users,
+  coorg_progress: MessageSquare,
+  coorg_complete: CheckSquare,
 };
 
 const colorMap = {
@@ -32,6 +38,9 @@ const colorMap = {
   urge: 'bg-red-500',
   return: 'bg-orange-500',
   archive: 'bg-gray-500',
+  coorg_assign: 'bg-indigo-500',
+  coorg_progress: 'bg-indigo-400',
+  coorg_complete: 'bg-teal-500',
 };
 
 export function Timeline({ logs }: TimelineProps) {
@@ -68,7 +77,11 @@ export function Timeline({ logs }: TimelineProps) {
                     log.type === 'urge' && 'text-red-700',
                     log.type === 'return' && 'text-orange-700',
                     log.type === 'complete' && 'text-green-700',
-                    !['urge', 'return', 'complete'].includes(log.type) && 'text-gray-900'
+                    log.type === 'archive' && 'text-purple-700',
+                    log.type === 'coorg_assign' && 'text-indigo-700',
+                    log.type === 'coorg_progress' && 'text-indigo-600',
+                    log.type === 'coorg_complete' && 'text-teal-700',
+                    !['urge', 'return', 'complete', 'archive', 'coorg_assign', 'coorg_progress', 'coorg_complete'].includes(log.type) && 'text-gray-900'
                   )}>
                     {log.content}
                   </p>

@@ -18,17 +18,21 @@ import {
   CheckCircle2,
   X,
   Info,
-  Clock
+  Clock,
+  Lightbulb,
+  ChevronDown
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { useContactStore } from '@/store/useContactStore';
 import { useDispatchRuleStore } from '@/store/useDispatchRuleStore';
 import { useSLARuleStore } from '@/store/useSLARuleStore';
+import { useKnowledgeStore } from '@/store/useKnowledgeStore';
 import { useWorkday } from '@/hooks/useWorkday';
-import { CATEGORIES, AREAS, HANDLER_UNITS, TicketCategory, Area, HandlerUnit, MatchResult } from '@/types';
+import { CATEGORIES, AREAS, HANDLER_UNITS, TicketCategory, Area, HandlerUnit, MatchResult, KnowledgeMatchResult, TemplateInsertMode } from '@/types';
 import { formatDate } from '@/utils/date';
 import { getDispatchRecommendation, getMatchReasonText } from '@/utils/dispatchRule';
 import { getSLARecommendation } from '@/utils/slaRule';
+import { getKnowledgeMatchReasonText, applyTemplateToContent, getScoreBadgeColor } from '@/utils/knowledge';
 import { clsx } from 'clsx';
 
 export default function NewTicket() {
@@ -37,6 +41,7 @@ export default function NewTicket() {
   const { getOnDutyContact, getContactsByUnit } = useContactStore();
   const { getEnabledRules } = useDispatchRuleStore();
   const { getEnabledRules: getEnabledSLARules } = useSLARuleStore();
+  const { searchKnowledge } = useKnowledgeStore();
   const { calculateDeadline } = useWorkday();
 
   const [formData, setFormData] = useState({
@@ -52,6 +57,8 @@ export default function NewTicket() {
   const [hasUserModifiedUnit, setHasUserModifiedUnit] = useState(false);
   const [hasUserModifiedDeadline, setHasUserModifiedDeadline] = useState(false);
   const [showRecommendation, setShowRecommendation] = useState(true);
+  const [expandedKnowledgeId, setExpandedKnowledgeId] = useState<string | null>(null);
+  const [templateInsertMode, setTemplateInsertMode] = useState<TemplateInsertMode>('replace');
 
   const rules = useMemo(() => getEnabledRules(), [getEnabledRules]);
   const slaRules = useMemo(() => getEnabledSLARules(), [getEnabledSLARules]);
@@ -77,6 +84,17 @@ export default function NewTicket() {
       handlerUnit: formData.handlerUnit,
     });
   }, [formData.category, formData.handlerUnit, slaRules]);
+
+  const knowledgeRecommendations = useMemo(() => {
+    if (!formData.title && !formData.content && !formData.category) {
+      return [];
+    }
+    return searchKnowledge({
+      title: formData.title,
+      content: formData.content,
+      category: formData.category,
+    }, 5);
+  }, [formData.title, formData.content, formData.category, searchKnowledge]);
 
   const hasRecommendation = recommendation && recommendation.handlerUnit;
   const hasSLARecommendation = slaRecommendation && slaRecommendation.deadlineDays !== null;
@@ -197,6 +215,42 @@ export default function NewTicket() {
       setHasUserModifiedUnit(false);
       setHasUserModifiedDeadline(false);
     }
+  };
+
+  const applyKnowledgeTemplate = (match: KnowledgeMatchResult) => {
+    const context = {
+      area: formData.area,
+      category: formData.category,
+      handlerUnit: match.entry.recommendedUnit,
+      title: formData.title,
+    };
+
+    const newContent = applyTemplateToContent(formData.content, match.entry.replyTemplate, {
+      mode: templateInsertMode,
+      replacePlaceholders: true,
+      context,
+    });
+
+    setFormData(prev => ({
+      ...prev,
+      content: newContent,
+      handlerUnit: match.entry.recommendedUnit,
+    }));
+
+    if (match.entry.category && !formData.category) {
+      setFormData(prev => ({
+        ...prev,
+        category: match.entry.category as TicketCategory,
+      }));
+    }
+
+    setHasUserModifiedUnit(true);
+    
+    useKnowledgeStore.getState().incrementUseCount(match.entry.id);
+  };
+
+  const toggleKnowledgeExpand = (id: string) => {
+    setExpandedKnowledgeId(prev => prev === id ? null : id);
   };
 
   const getScoreColor = (score: number) => {
@@ -656,6 +710,215 @@ export default function NewTicket() {
                 )}
               </div>
             )}
+          </div>
+
+          {/* Knowledge Base Recommendations */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="border-b border-gray-100 px-5 py-4 bg-gradient-to-r from-amber-50 to-yellow-50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-yellow-600">
+                    <Lightbulb className="h-4 w-4 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900">知识库推荐</h3>
+                    <p className="text-xs text-gray-500">基于输入内容智能匹配</p>
+                  </div>
+                </div>
+                {knowledgeRecommendations.length > 0 && (
+                  <span className="text-xs text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                    {knowledgeRecommendations.length} 条
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="p-5">
+              {knowledgeRecommendations.length === 0 ? (
+                <div className="text-center py-6">
+                  <Lightbulb className="mx-auto h-10 w-10 text-gray-300 mb-3" />
+                  <p className="text-sm text-gray-500">
+                    请输入工单标题或内容
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    系统将自动推荐相关知识条目
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Insert Mode Selector */}
+                  <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-100">
+                    <span className="text-xs text-gray-500">模板插入方式：</span>
+                    <div className="flex space-x-1">
+                      <button
+                        onClick={() => setTemplateInsertMode('replace')}
+                        className={clsx(
+                          'px-2 py-1 text-xs rounded transition-colors',
+                          templateInsertMode === 'replace'
+                            ? 'bg-primary-100 text-primary-700 font-medium'
+                            : 'text-gray-500 hover:bg-gray-100'
+                        )}
+                      >
+                        替换
+                      </button>
+                      <button
+                        onClick={() => setTemplateInsertMode('append')}
+                        className={clsx(
+                          'px-2 py-1 text-xs rounded transition-colors',
+                          templateInsertMode === 'append'
+                            ? 'bg-primary-100 text-primary-700 font-medium'
+                            : 'text-gray-500 hover:bg-gray-100'
+                        )}
+                      >
+                        追加
+                      </button>
+                      <button
+                        onClick={() => setTemplateInsertMode('prepend')}
+                        className={clsx(
+                          'px-2 py-1 text-xs rounded transition-colors',
+                          templateInsertMode === 'prepend'
+                            ? 'bg-primary-100 text-primary-700 font-medium'
+                            : 'text-gray-500 hover:bg-gray-100'
+                        )}
+                      >
+                        前置
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                  {knowledgeRecommendations.map((match, index) => (
+                    <div
+                      key={match.entry.id}
+                      className={clsx(
+                        'rounded-lg border transition-all overflow-hidden',
+                        index === 0
+                          ? 'border-amber-200 bg-amber-50/30'
+                          : 'border-gray-200 bg-gray-50'
+                      )}
+                    >
+                      {/* Header */}
+                      <div
+                        className="p-3 cursor-pointer hover:bg-white/50 transition-colors"
+                        onClick={() => toggleKnowledgeExpand(match.entry.id)}
+                      >
+                        <div className="flex items-start justify-between mb-1">
+                          <div className="flex items-start space-x-2">
+                            {index === 0 && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-200 text-amber-800">
+                              最佳匹配
+                            </span>
+                            )}
+                            <span className={clsx(
+                              'text-sm font-medium',
+                              index === 0 ? 'text-amber-800' : 'text-gray-700'
+                            )}>
+                              {match.entry.title}
+                            </span>
+                          </div>
+                          <span className={clsx(
+                            'text-xs font-semibold px-1.5 py-0.5 rounded',
+                            getScoreBadgeColor(match.score)
+                          )}>
+                            {match.score} 分
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mb-2">
+                          {getKnowledgeMatchReasonText(match) || '相关知识推荐'}
+                        </p>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs text-gray-500">
+                              {match.entry.recommendedUnit}
+                            </span>
+                            {match.entry.useCount > 0 && (
+                              <span className="text-xs text-gray-400 flex items-center space-x-0.5">
+                                <span>•</span>
+                                <span>{match.entry.useCount} 次使用</span>
+                              </span>
+                            )}
+                          </div>
+                          <ChevronDown
+                            className={clsx(
+                              'h-4 w-4 text-gray-400 transition-transform',
+                              expandedKnowledgeId === match.entry.id && 'rotate-180'
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Expanded Content */}
+                      {expandedKnowledgeId === match.entry.id && (
+                        <div className="px-3 pb-3 space-y-3 border-t border-amber-200/50 pt-3">
+                          {/* Key Points */}
+                          {match.entry.keyPoints && (
+                            <div className="rounded-lg bg-amber-50 border border-amber-200/50 p-3">
+                              <p className="text-xs font-medium text-amber-800 mb-1.5 flex items-center space-x-1">
+                                <Lightbulb className="h-3 w-3" />
+                                <span>办理要点</span>
+                              </p>
+                              <p className="text-xs text-amber-700 whitespace-pre-wrap leading-relaxed">
+                                {match.entry.keyPoints}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Template Preview */}
+                          <div>
+                            <p className="text-xs font-medium text-gray-700 mb-1.5">
+                              模板预览
+                            </p>
+                            <div className="rounded-lg bg-white border border-gray-200 p-3 max-h-32 overflow-y-auto">
+                              <p className="text-xs text-gray-600 whitespace-pre-wrap">
+                                {match.entry.replyTemplate.slice(0, 150)}
+                                {match.entry.replyTemplate.length > 150 && '...'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Keywords */}
+                          <div>
+                            <p className="text-xs font-medium text-gray-700 mb-1.5">
+                              关键词
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {match.entry.keywords.slice(0, 5).map((kw, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-primary-50 text-primary-600"
+                                >
+                                  {kw}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Apply Button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              applyKnowledgeTemplate(match);
+                            }}
+                            className="w-full py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
+                          >
+                            {templateInsertMode === 'replace' ? '应用模板' : 
+                             templateInsertMode === 'append' ? '追加模板到末尾' : '插入模板到开头'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  </div>
+
+                  <button
+                    onClick={() => navigate('/knowledge-base')}
+                    className="w-full text-center text-xs text-gray-500 hover:text-primary-600 transition-colors pt-3 mt-3 border-t border-gray-100"
+                  >
+                    查看全部知识条目 →
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Tips Card */}

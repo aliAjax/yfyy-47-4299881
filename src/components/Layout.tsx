@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
   FileText, 
@@ -16,9 +16,13 @@ import {
   Clock,
   CalendarClock,
   Monitor,
-  ExternalLink
+  ExternalLink,
+  Archive,
+  Lightbulb,
+  Bell
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
+import { useNotificationStore } from '@/store/useNotificationStore';
 import { clsx } from 'clsx';
 
 const navItems = [
@@ -27,7 +31,10 @@ const navItems = [
   { path: '/tickets/new', label: '新建工单', icon: PlusCircle },
   { path: '/tickets/batch-import', label: '批量导入', icon: Upload },
   { path: '/supervision', label: '督办中心', icon: AlertTriangle },
+  { path: '/notifications', label: '通知中心', icon: Bell },
+  { path: '/archive', label: '归档复盘', icon: Archive },
   { path: '/contacts', label: '通讯录', icon: BookOpen },
+  { path: '/knowledge-base', label: '知识库', icon: Lightbulb },
   { path: '/dispatch-rules', label: '分派规则', icon: Settings },
   { path: '/sla-rules', label: 'SLA时限', icon: Clock },
   { path: '/holiday-config', label: '节假日配置', icon: CalendarClock },
@@ -39,6 +46,20 @@ export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { currentRole, setCurrentRole, currentUnit, setCurrentUnit } = useTicketStore();
+  const notifications = useNotificationStore((state) => state.notifications);
+  const checkOverdueSoon = useNotificationStore((state) => state.checkOverdueSoon);
+  
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  useEffect(() => {
+    checkOverdueSoon();
+    
+    const interval = setInterval(() => {
+      checkOverdueSoon();
+    }, 60 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, [checkOverdueSoon]);
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -73,6 +94,7 @@ export function Layout() {
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
+            const isNotification = item.path === '/notifications';
             return (
               <NavLink
                 key={item.path}
@@ -84,8 +106,24 @@ export function Layout() {
                     : 'text-primary-100 hover:bg-white/10 hover:text-white'
                 )}
               >
-                <Icon className={clsx('h-5 w-5 flex-shrink-0', isActive && 'scale-110')} />
-                {sidebarOpen && <span>{item.label}</span>}
+                <div className="relative">
+                  <Icon className={clsx('h-5 w-5 flex-shrink-0', isActive && 'scale-110')} />
+                  {isNotification && unreadCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[16px] h-[16px] px-0.5 rounded-full bg-red-500 text-white text-[10px] font-medium">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </div>
+                {sidebarOpen && (
+                  <div className="flex items-center justify-between flex-1">
+                    <span>{item.label}</span>
+                    {isNotification && unreadCount > 0 && (
+                      <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500/90 text-white text-xs font-medium">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
+                  </div>
+                )}
               </NavLink>
             );
           })}
@@ -163,6 +201,19 @@ export function Layout() {
           </div>
           
           <div className="flex items-center space-x-4">
+            {/* Notification Bell */}
+            <button
+              onClick={() => navigate('/notifications')}
+              className="relative p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-xs font-medium">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </button>
+            
             <div className="text-right">
               <p className="text-sm font-medium text-gray-900">
                 {currentRole === 'supervisor' ? '李督办' : '张经办'}

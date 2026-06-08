@@ -12,7 +12,8 @@ import {
   Inbox,
   PlusCircle,
   CheckCircle,
-  Upload
+  Upload,
+  Users
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -132,6 +133,7 @@ function TodoCard({ title, count, icon: Icon, color, children, onViewAll }: Todo
 function TicketItem({ ticket, showUnit = false }: TicketItemProps) {
   const navigate = useNavigate();
   const { getRiskLevel, getDeadlineLabel } = useWorkday();
+  const { isCoOrganizing, getTicketRole, currentRole, currentUnit } = useTicketStore();
   const risk = getRiskLevel(ticket.deadline, ticket.status);
 
   const deadlineClass = clsx(
@@ -147,7 +149,26 @@ function TicketItem({ ticket, showUnit = false }: TicketItemProps) {
       onClick={() => navigate(`/tickets/${ticket.id}`)}
     >
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-900 truncate font-medium">{ticket.title}</p>
+        <div className="flex items-center space-x-2">
+          <p className="text-sm text-gray-900 truncate font-medium">{ticket.title}</p>
+          {currentRole === 'handler' && currentUnit && getTicketRole(ticket, currentUnit) === 'coorganizer' && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 text-xs font-medium flex-shrink-0">
+              <Users className="h-3 w-3 mr-0.5" />
+              <span>协办</span>
+            </span>
+          )}
+          {currentRole === 'handler' && currentUnit && getTicketRole(ticket, currentUnit) === 'main' && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-xs font-medium flex-shrink-0">
+              <span>主办</span>
+            </span>
+          )}
+          {isCoOrganizing(ticket) && (
+            <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0">
+              <Users className="h-3 w-3" />
+              <span>协办中</span>
+            </span>
+          )}
+        </div>
         <div className="flex items-center space-x-3 mt-1">
           <span className="text-xs text-gray-500 font-mono">{ticket.id}</span>
           {showUnit && <span className="text-xs text-gray-500">{ticket.handlerUnit}</span>}

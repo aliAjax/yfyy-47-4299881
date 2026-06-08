@@ -3,9 +3,9 @@ import { clsx } from 'clsx';
 
 interface StatsCardProps {
   title: string;
-  value: number;
+  value: number | string;
   icon: LucideIcon;
-  color: 'blue' | 'yellow' | 'green' | 'red';
+  color: 'blue' | 'yellow' | 'green' | 'red' | 'purple';
   onClick?: () => void;
 }
 
@@ -14,6 +14,7 @@ const colorStyles = {
   yellow: 'from-yellow-500 to-yellow-600',
   green: 'from-green-500 to-green-600',
   red: 'from-red-500 to-red-600',
+  purple: 'from-purple-500 to-purple-600',
 };
 
 const iconBgStyles = {
@@ -21,6 +22,7 @@ const iconBgStyles = {
   yellow: 'bg-yellow-100 text-yellow-600',
   green: 'bg-green-100 text-green-600',
   red: 'bg-red-100 text-red-600',
+  purple: 'bg-purple-100 text-purple-600',
 };
 
 export function StatsCard({ title, value, icon: Icon, color, onClick }: StatsCardProps) {

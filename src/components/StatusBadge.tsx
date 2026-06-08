@@ -12,6 +12,7 @@ const statusStyles: Record<TicketStatus, string> = {
   completed: 'bg-green-100 text-green-800 border-green-200',
   overdue: 'bg-red-100 text-red-800 border-red-200',
   returned: 'bg-orange-100 text-orange-800 border-orange-200',
+  archived: 'bg-purple-100 text-purple-800 border-purple-200',
 };
 
 export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
@@ -30,6 +31,7 @@ export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
         status === 'completed' && 'bg-green-500',
         status === 'overdue' && 'bg-red-500',
         status === 'returned' && 'bg-orange-500',
+        status === 'archived' && 'bg-purple-500',
       )} />
       {STATUS_LABELS[status]}
     </span>

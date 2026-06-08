@@ -26,7 +26,7 @@ export function FilterBar() {
         )}
       </div>
       
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-6">
         {/* 状态 */}
         <div>
           <label className="mb-1.5 block text-xs font-medium text-gray-600">工单状态</label>
@@ -105,6 +105,20 @@ export function FilterBar() {
             <option value="3days">3天内到期</option>
             <option value="7days">7天内到期</option>
             <option value="15days">15天内到期</option>
+          </select>
+        </div>
+
+        {/* 是否有协办 */}
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-gray-600">协办情况</label>
+          <select
+            value={filterOptions.hasCoOrganizer}
+            onChange={(e) => setFilterOptions({ hasCoOrganizer: e.target.value as 'all' | 'yes' | 'no' })}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-all"
+          >
+            <option value="all">全部工单</option>
+            <option value="yes">有协办</option>
+            <option value="no">无协办</option>
           </select>
         </div>
       </div>
