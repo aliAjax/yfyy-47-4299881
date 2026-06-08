@@ -150,6 +150,14 @@ export interface FilterOptions {
   deadlineRange: string;
 }
 
+export interface FilterView {
+  id: string;
+  name: string;
+  filterOptions: FilterOptions;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ArchiveFilterOptions {
   handlerUnit: HandlerUnit | '';
   category: TicketCategory | '';

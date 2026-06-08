@@ -3,6 +3,7 @@ import { Clock, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles, Users
 import { useTicketStore } from '@/store/useTicketStore';
 import { StatsCard } from '@/components/StatsCard';
 import { FilterBar } from '@/components/FilterBar';
+import { FilterViewSelector } from '@/components/FilterViewSelector';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Ticket } from '@/types';
 import { useWorkday } from '@/hooks/useWorkday';
@@ -72,6 +73,8 @@ export default function TicketList() {
           onClick={() => handleStatClick('overdue')}
         />
       </div>
+
+      <FilterViewSelector />
 
       {/* Filter Bar */}
       <FilterBar />
