@@ -9,12 +9,14 @@ import {
   PhoneCall,
   User,
   ChevronDown,
-  Upload
+  Upload,
+  LayoutDashboard
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { clsx } from 'clsx';
 
 const navItems = [
+  { path: '/my-todo', label: '我的待办', icon: LayoutDashboard },
   { path: '/', label: '工单列表', icon: FileText },
   { path: '/tickets/new', label: '新建工单', icon: PlusCircle },
   { path: '/tickets/batch-import', label: '批量导入', icon: Upload },

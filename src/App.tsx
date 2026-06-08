@@ -5,6 +5,7 @@ import TicketDetail from "@/pages/TicketDetail";
 import NewTicket from "@/pages/NewTicket";
 import Supervision from "@/pages/Supervision";
 import BatchImport from "@/pages/BatchImport";
+import MyTodo from "@/pages/MyTodo";
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<TicketList />} />
+          <Route path="/my-todo" element={<MyTodo />} />
           <Route path="/tickets/:id" element={<TicketDetail />} />
           <Route path="/tickets/new" element={<NewTicket />} />
           <Route path="/tickets/batch-import" element={<BatchImport />} />

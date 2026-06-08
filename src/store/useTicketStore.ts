@@ -36,6 +36,21 @@ interface TicketState {
   getRiskTickets: () => { high: Ticket[]; medium: Ticket[]; low: Ticket[] };
   getUrgeRecords: () => UrgeRecord[];
   getReturnRecords: () => ReturnRecord[];
+  
+  getHandlerTodoStats: () => {
+    pending: number;
+    processing: number;
+    returned: number;
+    upcomingDeadline: number;
+  };
+  getHandlerTodoTickets: (type: 'pending' | 'processing' | 'returned' | 'upcoming') => Ticket[];
+  
+  getSupervisorTodoStats: () => {
+    highRisk: number;
+    pendingUrge: number;
+    returned: number;
+  };
+  getSupervisorTodoTickets: (type: 'highRisk' | 'pendingUrge' | 'returned') => Ticket[];
 }
 
 const initialFilterOptions: FilterOptions = {
@@ -351,6 +366,111 @@ export const useTicketStore = create<TicketState>()(
         return tickets.flatMap(t => t.returnRecords).sort(
           (a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime()
         );
+      },
+
+      getHandlerTodoStats: () => {
+        const { tickets, currentUnit } = get();
+        let list = tickets.filter(t => t.handlerUnit === currentUnit);
+        const now = new Date();
+        
+        const upcomingDeadline = list.filter(t => {
+          if (t.status === 'completed') return false;
+          const deadline = new Date(t.deadline);
+          const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          return diffDays >= 0 && diffDays <= 3;
+        }).length;
+
+        return {
+          pending: list.filter(t => t.status === 'pending').length,
+          processing: list.filter(t => t.status === 'processing').length,
+          returned: list.filter(t => t.status === 'returned').length,
+          upcomingDeadline,
+        };
+      },
+
+      getHandlerTodoTickets: (type) => {
+        const { tickets, currentUnit } = get();
+        let list = tickets.filter(t => t.handlerUnit === currentUnit);
+        const now = new Date();
+
+        switch (type) {
+          case 'pending':
+            return list.filter(t => t.status === 'pending')
+              .sort((a, b) => new Date(b.assignTime).getTime() - new Date(a.assignTime).getTime());
+          case 'processing':
+            return list.filter(t => t.status === 'processing')
+              .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
+          case 'returned':
+            return list.filter(t => t.status === 'returned')
+              .sort((a, b) => new Date(b.assignTime).getTime() - new Date(a.assignTime).getTime());
+          case 'upcoming':
+            return list.filter(t => {
+              if (t.status === 'completed') return false;
+              const deadline = new Date(t.deadline);
+              const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+              return diffDays >= 0 && diffDays <= 3;
+            }).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
+          default:
+            return [];
+        }
+      },
+
+      getSupervisorTodoStats: () => {
+        const { tickets } = get();
+        const now = new Date();
+        
+        const highRisk = tickets.filter(t => {
+          if (t.status === 'completed') return false;
+          const deadline = new Date(t.deadline);
+          const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          return diffDays < 0 || t.status === 'overdue' || diffDays <= 1;
+        }).length;
+
+        const pendingUrge = tickets.filter(t => {
+          if (t.status === 'completed') return false;
+          const deadline = new Date(t.deadline);
+          const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          return diffDays <= 3 && diffDays >= 0 && t.urgeRecords.length === 0;
+        }).length;
+
+        const returned = tickets.filter(t => t.status === 'returned').length;
+
+        return { highRisk, pendingUrge, returned };
+      },
+
+      getSupervisorTodoTickets: (type) => {
+        const { tickets } = get();
+        const now = new Date();
+
+        switch (type) {
+          case 'highRisk':
+            return tickets.filter(t => {
+              if (t.status === 'completed') return false;
+              const deadline = new Date(t.deadline);
+              const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+              return diffDays < 0 || t.status === 'overdue' || diffDays <= 1;
+            }).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
+          case 'pendingUrge':
+            return tickets.filter(t => {
+              if (t.status === 'completed') return false;
+              const deadline = new Date(t.deadline);
+              const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+              return diffDays <= 3 && diffDays >= 0 && t.urgeRecords.length === 0;
+            }).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
+          case 'returned':
+            return tickets.filter(t => t.status === 'returned')
+              .sort((a, b) => {
+                const aReturnTime = a.returnRecords.length > 0 
+                  ? new Date(a.returnRecords[a.returnRecords.length - 1].createTime).getTime()
+                  : 0;
+                const bReturnTime = b.returnRecords.length > 0 
+                  ? new Date(b.returnRecords[b.returnRecords.length - 1].createTime).getTime()
+                  : 0;
+                return bReturnTime - aReturnTime;
+              });
+          default:
+            return [];
+        }
       },
     }),
     {
