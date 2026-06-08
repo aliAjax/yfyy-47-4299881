@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
   FileText, 
   PlusCircle, 
@@ -14,7 +14,9 @@ import {
   BookOpen,
   Settings,
   Clock,
-  CalendarClock
+  CalendarClock,
+  Monitor,
+  ExternalLink
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { clsx } from 'clsx';
@@ -35,6 +37,7 @@ export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const { currentRole, setCurrentRole, currentUnit, setCurrentUnit } = useTicketStore();
 
   return (
@@ -86,6 +89,24 @@ export function Layout() {
               </NavLink>
             );
           })}
+          
+          <div className="my-2 border-t border-primary-500/30" />
+          
+          <button
+            onClick={() => navigate('/dashboard')}
+            className={clsx(
+              'w-full flex items-center space-x-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
+              'text-primary-100 hover:bg-white/10 hover:text-white'
+            )}
+          >
+            <Monitor className="h-5 w-5 flex-shrink-0" />
+            {sidebarOpen && (
+              <div className="flex items-center justify-between flex-1">
+                <span>指挥大屏</span>
+                <ExternalLink className="h-3.5 w-3.5 opacity-60" />
+              </div>
+            )}
+          </button>
         </nav>
 
         {/* Role Switcher */}

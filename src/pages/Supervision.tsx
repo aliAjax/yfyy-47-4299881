@@ -9,7 +9,9 @@ import {
   TrendingUp,
   AlertOctagon,
   AlertCircle,
-  Info
+  Info,
+  Monitor,
+  ExternalLink
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -57,6 +59,28 @@ export default function Supervision() {
 
   return (
     <div className="space-y-6">
+      {/* Dashboard Quick Entry */}
+      <div
+        onClick={() => navigate('/dashboard')}
+        className="cursor-pointer rounded-xl border border-primary-200 bg-gradient-to-r from-primary-50 to-indigo-50 p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:scale-[1.01]"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-indigo-600">
+              <Monitor className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <p className="text-base font-semibold text-primary-700">监督指挥大屏</p>
+              <p className="text-xs text-primary-500 mt-0.5">全市工单运行态势实时监控 · 数据可视化</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 text-primary-600 text-sm font-medium">
+            <span>查看大屏</span>
+            <ExternalLink className="h-4 w-4" />
+          </div>
+        </div>
+      </div>
+
       {/* Stats Overview */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-xl border border-red-200 bg-gradient-to-br from-red-50 to-white p-5 shadow-sm">

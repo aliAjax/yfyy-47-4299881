@@ -10,11 +10,13 @@ import ContactBook from "@/pages/ContactBook";
 import DispatchRules from "@/pages/DispatchRules";
 import HolidayConfig from "@/pages/HolidayConfig";
 import SLARules from "@/pages/SLARules";
+import Dashboard from "@/pages/Dashboard";
 
 export default function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route element={<Layout />}>
           <Route path="/" element={<TicketList />} />
           <Route path="/my-todo" element={<MyTodo />} />
