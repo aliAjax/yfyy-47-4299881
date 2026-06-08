@@ -79,16 +79,32 @@ export const useContactStore = create<ContactState>()(
           id: generateId(),
         };
         set((state) => ({
-          contacts: [...state.contacts, newContact],
+          contacts: [
+            ...state.contacts.map(c =>
+              contactData.isOnDuty && c.unit === contactData.unit
+                ? { ...c, isOnDuty: false }
+                : c
+            ),
+            newContact,
+          ],
         }));
       },
 
       updateContact: (id, contactData) => {
-        set((state) => ({
-          contacts: state.contacts.map(c =>
-            c.id === id ? { ...c, ...contactData } : c
-          ),
-        }));
+        set((state) => {
+          const contact = state.contacts.find(c => c.id === id);
+          if (!contact) return state;
+
+          return {
+            contacts: state.contacts.map(c => {
+              if (c.id === id) return { ...c, ...contactData };
+              if (contactData.isOnDuty && c.unit === contact.unit) {
+                return { ...c, isOnDuty: false };
+              }
+              return c;
+            }),
+          };
+        });
       },
 
       deleteContact: (id) => {
