@@ -24,7 +24,7 @@ export interface CsvParseResult {
   invalidRows: number;
 }
 
-const REQUIRED_FIELDS = ['title', 'category', 'area', 'content', 'handlerUnit'];
+const REQUIRED_FIELDS = ['title', 'category', 'area', 'content'];
 
 const FIELD_LABELS: Record<string, string> = {
   title: '诉求标题',
@@ -227,14 +227,7 @@ function validateRow(row: CsvRow, rowNum: number): CsvValidationError[] {
     });
   }
 
-  if (!row.handlerUnit.trim()) {
-    errors.push({
-      row: rowNum,
-      field: 'handlerUnit',
-      message: `第 ${rowNum} 行：承办单位不能为空`,
-      type: 'missing',
-    });
-  } else if (!isValidHandlerUnit(row.handlerUnit.trim())) {
+  if (row.handlerUnit.trim() && !isValidHandlerUnit(row.handlerUnit.trim())) {
     errors.push({
       row: rowNum,
       field: 'handlerUnit',

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useCallback, useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -11,21 +11,42 @@ import {
   Download,
   Table,
   Eye,
-  AlertTriangle
+  AlertTriangle,
+  Sparkles,
+  RotateCcw,
+  BadgeCheck
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
+import { useDispatchRuleStore } from '@/store/useDispatchRuleStore';
+import { useSLARuleStore } from '@/store/useSLARuleStore';
 import { parseCsv, generateSampleCsv, CsvParseResult } from '@/utils/csvParser';
-import { TicketCategory, Area, HandlerUnit, CATEGORIES, AREAS, HANDLER_UNITS } from '@/types';
+import { TicketCategory, Area, HandlerUnit, CATEGORIES, AREAS, HANDLER_UNITS, DispatchInfo, MatchResult, SLAMatchResult } from '@/types';
 import { formatDate } from '@/utils/date';
+import { getDispatchRecommendation, getMatchReasonText } from '@/utils/dispatchRule';
+import { getSLARecommendation, getSLAMatchReasonText } from '@/utils/slaRule';
 import { useWorkday } from '@/hooks/useWorkday';
 import { clsx } from 'clsx';
 
 type InputMode = 'upload' | 'paste';
+type RowValueSource = 'recommended' | 'csv';
+
+interface RowRecommendation {
+  rowIndex: number;
+  recommendedUnit: HandlerUnit | null;
+  recommendedDeadlineDays: number;
+  dispatchMatches: MatchResult[];
+  slaMatches: SLAMatchResult[];
+  hasConflict: boolean;
+  conflictReason?: string;
+  reasonText: string;
+}
 
 export default function BatchImport() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { batchAddTickets } = useTicketStore();
+  const { getEnabledRules } = useDispatchRuleStore();
+  const { getEnabledRules: getEnabledSLARules } = useSLARuleStore();
   const { calculateDeadline } = useWorkday();
 
   const [inputMode, setInputMode] = useState<InputMode>('upload');
@@ -35,6 +56,111 @@ export default function BatchImport() {
   const [importSuccess, setImportSuccess] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [rowValueSources, setRowValueSources] = useState<Record<number, RowValueSource>>({});
+
+  const dispatchRules = useMemo(() => getEnabledRules(), [getEnabledRules]);
+  const slaRules = useMemo(() => getEnabledSLARules(), [getEnabledSLARules]);
+
+  const rowRecommendations = useMemo(() => {
+    if (!parseResult) return [] as RowRecommendation[];
+
+    return parseResult.rows.map((row, index) => {
+      const category = row.category.trim() as TicketCategory | '';
+      const area = row.area.trim() as Area | '';
+      const csvUnit = row.handlerUnit.trim() as HandlerUnit | '';
+
+      const dispatchRecommendation = getDispatchRecommendation(dispatchRules, {
+        title: row.title,
+        content: row.content,
+        category,
+        area,
+      });
+
+      const unitForSLA = dispatchRecommendation.handlerUnit || csvUnit;
+      const slaRecommendation = getSLARecommendation(slaRules, {
+        category,
+        handlerUnit: unitForSLA,
+      });
+
+      const recommendedDeadlineDays =
+        slaRecommendation.deadlineDays ||
+        dispatchRecommendation.deadlineDays ||
+        7;
+
+      const dispatchReason = dispatchRecommendation.matchedRules
+        .map(match => `${match.rule.name}：${getMatchReasonText(match) || '规则匹配'}（${match.score}分）`);
+      const slaReason = slaRecommendation.matchedRules.slice(0, 2)
+        .map(match => `${match.rule.name}：${getSLAMatchReasonText(match) || 'SLA规则匹配'}（${match.rule.deadlineDays}个工作日）`);
+
+      return {
+        rowIndex: index,
+        recommendedUnit: dispatchRecommendation.handlerUnit,
+        recommendedDeadlineDays,
+        dispatchMatches: dispatchRecommendation.matchedRules,
+        slaMatches: slaRecommendation.matchedRules,
+        hasConflict: dispatchRecommendation.hasConflict,
+        conflictReason: dispatchRecommendation.conflictReason,
+        reasonText: [...dispatchReason, ...slaReason].join('；') || '未命中分派规则，使用默认办理期限',
+      };
+    });
+  }, [dispatchRules, parseResult, slaRules]);
+
+  const validRowIndexes = useMemo(() => {
+    if (!parseResult) return [];
+    return parseResult.rows
+      .map((_, index) => index)
+      .filter(index => !parseResult.errors.some(e => e.row === index + 1));
+  }, [parseResult]);
+
+  const recommendationMap = useMemo(() => {
+    return new Map(rowRecommendations.map(item => [item.rowIndex, item]));
+  }, [rowRecommendations]);
+
+  const getRowValueSource = useCallback((rowIndex: number): RowValueSource => {
+    return rowValueSources[rowIndex] || 'recommended';
+  }, [rowValueSources]);
+
+  const getEffectiveRowValues = useCallback((rowIndex: number) => {
+    const row = parseResult?.rows[rowIndex];
+    const recommendation = recommendationMap.get(rowIndex);
+    const source = getRowValueSource(rowIndex);
+    const csvUnit = row?.handlerUnit.trim() as HandlerUnit | '';
+    const csvDeadlineDays = row?.deadline ? parseInt(row.deadline) : null;
+    const hasCsvValue = Boolean(csvUnit) || Boolean(csvDeadlineDays);
+    const shouldPreserveCsv = source === 'csv' && hasCsvValue;
+    const canUseCsvValue = shouldPreserveCsv || (!recommendation?.recommendedUnit && Boolean(csvUnit));
+    const handlerUnit = (canUseCsvValue && csvUnit ? csvUnit : recommendation?.recommendedUnit || csvUnit) || '';
+    const deadlineDays = canUseCsvValue
+      ? csvDeadlineDays || recommendation?.recommendedDeadlineDays || 7
+      : recommendation?.recommendedDeadlineDays || csvDeadlineDays || 7;
+
+    return {
+      handlerUnit,
+      deadlineDays,
+      source: canUseCsvValue ? 'csv' as RowValueSource : 'recommended' as RowValueSource,
+      hasImportValue: Boolean(handlerUnit),
+    };
+  }, [getRowValueSource, parseResult, recommendationMap]);
+
+  const importableRowIndexes = useMemo(() => {
+    return validRowIndexes.filter(index => getEffectiveRowValues(index).hasImportValue);
+  }, [getEffectiveRowValues, validRowIndexes]);
+
+  const recommendationStats = useMemo(() => {
+    const validRecommendations = validRowIndexes
+      .map(index => recommendationMap.get(index))
+      .filter((item): item is RowRecommendation => Boolean(item));
+    const recommendedRows = validRecommendations.filter(item => item.recommendedUnit).length;
+    const csvRows = validRowIndexes.filter(index => getRowValueSource(index) === 'csv').length;
+
+    return {
+      recommendedRows,
+      csvRows,
+      importableRows: importableRowIndexes.length,
+      conflictRows: validRecommendations.filter(item => item.hasConflict).length,
+      slaRows: validRecommendations.filter(item => item.slaMatches.length > 0).length,
+    };
+  }, [getRowValueSource, importableRowIndexes.length, recommendationMap, validRowIndexes]);
 
   const handleFileSelect = (file: File) => {
     const reader = new FileReader();
@@ -43,6 +169,7 @@ export default function BatchImport() {
       setCsvText(content);
       setIsParsed(false);
       setParseResult(null);
+      setRowValueSources({});
     };
     reader.readAsText(file);
   };
@@ -77,26 +204,50 @@ export default function BatchImport() {
     const result = parseCsv(csvText);
     setParseResult(result);
     setIsParsed(true);
+    setRowValueSources({});
   };
 
   const handleImport = () => {
-    if (!parseResult || parseResult.validRows === 0) return;
+    if (!parseResult || importableRowIndexes.length === 0) return;
 
-    const validRows = parseResult.rows.filter((_, index) => {
-      const rowNum = index + 1;
-      return !parseResult.errors.some(e => e.row === rowNum);
-    });
+    const now = new Date();
+    const assignTime = formatDate(now) + ' ' + now.toTimeString().slice(0, 5);
 
-    const ticketsData = validRows.map(row => {
-      const deadlineDays = row.deadline ? parseInt(row.deadline) : 7;
+    const ticketsData = importableRowIndexes.map(index => {
+      const row = parseResult.rows[index];
+      const recommendation = recommendationMap.get(index);
+      const effectiveValues = getEffectiveRowValues(index);
+      const useCsvValue = effectiveValues.source === 'csv';
+      const handlerUnit = effectiveValues.handlerUnit as HandlerUnit;
+      const deadlineDays = effectiveValues.deadlineDays;
+      const appliedRecommendation = !useCsvValue && Boolean(recommendation?.recommendedUnit);
+
+      const dispatchInfo: DispatchInfo | undefined = recommendation ? {
+        matchedRules: recommendation.dispatchMatches.map(match => ({
+          ruleId: match.rule.id,
+          ruleName: match.rule.name,
+          matchedFields: match.matchedFields,
+          matchedKeywords: match.matchedKeywords,
+          score: match.score,
+        })),
+        recommendedUnit: recommendation.recommendedUnit,
+        recommendedDeadlineDays: recommendation.recommendedDeadlineDays,
+        appliedRecommendation,
+        hasConflict: recommendation.hasConflict,
+        dispatchMethod: appliedRecommendation ? 'recommended' : 'manual',
+        dispatchOperator: '工单调度员',
+        dispatchTime: assignTime,
+      } : undefined;
+
       return {
         title: row.title.trim(),
         category: row.category.trim() as TicketCategory,
         area: row.area.trim() as Area,
         content: row.content.trim(),
-        handlerUnit: row.handlerUnit.trim() as HandlerUnit,
-        assignTime: formatDate(new Date()) + ' ' + new Date().toTimeString().slice(0, 5),
-        deadline: calculateDeadline(new Date(), deadlineDays),
+        handlerUnit,
+        assignTime,
+        deadline: calculateDeadline(now, deadlineDays),
+        dispatchInfo,
       };
     });
 
@@ -130,9 +281,24 @@ export default function BatchImport() {
     setIsParsed(false);
     setImportSuccess(false);
     setImportedCount(0);
+    setRowValueSources({});
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const setAllRowSources = (source: RowValueSource) => {
+    const next = validRowIndexes.reduce<Record<number, RowValueSource>>((acc, index) => {
+      const row = parseResult?.rows[index];
+      const hasCsvValue = Boolean(row?.handlerUnit.trim()) || Boolean(row?.deadline.trim());
+      acc[index] = source === 'csv' && !hasCsvValue ? 'recommended' : source;
+      return acc;
+    }, {});
+    setRowValueSources(next);
+  };
+
+  const setRowSource = (rowIndex: number, source: RowValueSource) => {
+    setRowValueSources(prev => ({ ...prev, [rowIndex]: source }));
   };
 
   const getRowErrorFields = (rowIndex: number): string[] => {
@@ -324,6 +490,7 @@ export default function BatchImport() {
                   setCsvText(e.target.value);
                   setIsParsed(false);
                   setParseResult(null);
+                  setRowValueSources({});
                 }}
                 placeholder="请粘贴 CSV 格式的工单数据，第一行为表头..."
                 rows={10}
@@ -338,8 +505,8 @@ export default function BatchImport() {
               <div className="text-sm text-blue-800 space-y-1">
                 <p className="font-medium">CSV 文件格式说明</p>
                 <ul className="list-disc list-inside space-y-0.5 text-blue-700">
-                  <li>必需字段：诉求标题、诉求类型、所属区域、诉求内容、承办单位</li>
-                  <li>可选字段：办理期限（工作日，默认为 7 个工作日）</li>
+                  <li>必需字段：诉求标题、诉求类型、所属区域、诉求内容</li>
+                  <li>可选字段：承办单位、办理期限（未填写时优先使用规则推荐）</li>
                   <li>诉求类型可选值：{CATEGORIES.join('、')}</li>
                   <li>所属区域可选值：{AREAS.join('、')}</li>
                   <li>承办单位可选值：{HANDLER_UNITS.join('、')}</li>
@@ -391,8 +558,39 @@ export default function BatchImport() {
                     <span className={parseResult.invalidRows > 0 ? 'text-red-600' : ''}>
                       {parseResult.invalidRows} 条异常
                     </span>
+                    ，
+                    <span className={recommendationStats.importableRows > 0 ? 'text-primary-600' : 'text-red-600'}>
+                      {recommendationStats.importableRows} 条可导入
+                    </span>
                   </p>
                 </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <span className="inline-flex items-center rounded-full bg-violet-50 px-3 py-1 text-xs text-violet-700">
+                  推荐单位 {recommendationStats.recommendedRows} 条
+                </span>
+                <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-700">
+                  SLA匹配 {recommendationStats.slaRows} 条
+                </span>
+                {recommendationStats.conflictRows > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs text-amber-700">
+                    冲突 {recommendationStats.conflictRows} 条
+                  </span>
+                )}
+                <button
+                  onClick={() => setAllRowSources('recommended')}
+                  className="inline-flex items-center space-x-1 rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-xs text-violet-700 hover:bg-violet-50 transition-colors"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>全部用推荐</span>
+                </button>
+                <button
+                  onClick={() => setAllRowSources('csv')}
+                  className="inline-flex items-center space-x-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>保留CSV人工值</span>
+                </button>
               </div>
             </div>
           </div>
@@ -446,6 +644,15 @@ export default function BatchImport() {
                     办理期限（工作日）
                   </th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500 text-xs uppercase tracking-wider">
+                    推荐结果
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500 text-xs uppercase tracking-wider">
+                    匹配原因
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500 text-xs uppercase tracking-wider">
+                    导入值
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500 text-xs uppercase tracking-wider">
                     状态
                   </th>
                 </tr>
@@ -454,12 +661,18 @@ export default function BatchImport() {
                 {parseResult.rows.slice(0, 50).map((row, idx) => {
                   const hasError = hasRowErrors(idx);
                   const errorFields = getRowErrorFields(idx);
+                  const recommendation = recommendationMap.get(idx);
+                  const effectiveValues = getEffectiveRowValues(idx);
+                  const hasCsvUnit = Boolean(row.handlerUnit.trim());
+                  const hasCsvValue = hasCsvUnit || Boolean(row.deadline.trim());
+                  const canImport = !hasError && effectiveValues.hasImportValue;
                   return (
                     <tr
                       key={idx}
                       className={clsx(
                         'hover:bg-gray-50 transition-colors',
-                        hasError && 'bg-red-50'
+                        hasError && 'bg-red-50',
+                        !hasError && !canImport && 'bg-amber-50'
                       )}
                     >
                       <td className="px-4 py-3 text-gray-500 font-mono text-xs">
@@ -495,16 +708,92 @@ export default function BatchImport() {
                       )}>
                         {row.deadline ? `${row.deadline} 个工作日` : <span className="text-gray-400">默认 7 个工作日</span>}
                       </td>
+                      <td className="px-4 py-3 min-w-48">
+                        {recommendation?.recommendedUnit ? (
+                          <div className="space-y-1">
+                            <p className="font-medium text-gray-900">{recommendation.recommendedUnit}</p>
+                            <p className="text-xs text-gray-500">
+                              {recommendation.recommendedDeadlineDays} 个工作日
+                              {recommendation.slaMatches.length > 0 && (
+                                <span className="ml-1 text-primary-600">SLA</span>
+                              )}
+                            </p>
+                            {recommendation.hasConflict && (
+                              <p className="text-xs text-amber-600">存在分派冲突</p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">暂无推荐单位</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 min-w-72 max-w-md">
+                        <p className="line-clamp-3 text-xs text-gray-600" title={recommendation?.reasonText}>
+                          {recommendation?.reasonText || '暂无匹配原因'}
+                        </p>
+                        {recommendation?.conflictReason && (
+                          <p className="mt-1 text-xs text-amber-600" title={recommendation.conflictReason}>
+                            {recommendation.conflictReason}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 min-w-56">
+                        <div className="space-y-2">
+                          <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setRowSource(idx, 'recommended')}
+                              disabled={!recommendation?.recommendedUnit}
+                              className={clsx(
+                                'inline-flex items-center space-x-1 rounded-md px-2.5 py-1 text-xs transition-colors',
+                                effectiveValues.source === 'recommended'
+                                  ? 'bg-violet-600 text-white'
+                                  : 'text-gray-600 hover:bg-white',
+                                !recommendation?.recommendedUnit && 'cursor-not-allowed opacity-40'
+                              )}
+                            >
+                              <Sparkles className="h-3.5 w-3.5" />
+                              <span>推荐</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRowSource(idx, 'csv')}
+                              disabled={!hasCsvValue}
+                              className={clsx(
+                                'inline-flex items-center space-x-1 rounded-md px-2.5 py-1 text-xs transition-colors',
+                                effectiveValues.source === 'csv'
+                                  ? 'bg-gray-700 text-white'
+                                  : 'text-gray-600 hover:bg-white',
+                                !hasCsvValue && 'cursor-not-allowed opacity-40'
+                              )}
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                              <span>CSV</span>
+                            </button>
+                          </div>
+                          {effectiveValues.hasImportValue ? (
+                            <p className="text-xs text-gray-600">
+                              {effectiveValues.handlerUnit}，{effectiveValues.deadlineDays} 个工作日
+                            </p>
+                          ) : (
+                            <p className="text-xs text-amber-600">缺少可导入承办单位</p>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         {hasError ? (
                           <span className="inline-flex items-center space-x-1 text-xs text-red-600">
                             <XCircle className="h-3.5 w-3.5" />
                             <span>异常</span>
                           </span>
+                        ) : !canImport ? (
+                          <span className="inline-flex items-center space-x-1 text-xs text-amber-600">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            <span>待确认</span>
+                          </span>
                         ) : (
                           <span className="inline-flex items-center space-x-1 text-xs text-green-600">
-                            <CheckCircle className="h-3.5 w-3.5" />
-                            <span>正常</span>
+                            <BadgeCheck className="h-3.5 w-3.5" />
+                            <span>可导入</span>
                           </span>
                         )}
                       </td>
@@ -530,16 +819,16 @@ export default function BatchImport() {
             </button>
             <button
               onClick={handleImport}
-              disabled={parseResult.validRows === 0}
+              disabled={recommendationStats.importableRows === 0}
               className={clsx(
                 'inline-flex items-center space-x-2 rounded-lg px-5 py-2 text-sm font-medium transition-colors',
-                parseResult.validRows > 0
+                recommendationStats.importableRows > 0
                   ? 'bg-green-600 text-white hover:bg-green-700'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               )}
             >
               <CheckCircle className="h-4 w-4" />
-              <span>确认导入 ({parseResult.validRows} 条)</span>
+              <span>确认导入 ({recommendationStats.importableRows} 条)</span>
             </button>
           </div>
         </div>
