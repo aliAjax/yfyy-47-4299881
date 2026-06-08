@@ -5,12 +5,13 @@ import { StatsCard } from '@/components/StatsCard';
 import { FilterBar } from '@/components/FilterBar';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Ticket } from '@/types';
-import { getDeadlineLabel, getRiskLevel } from '@/utils/date';
+import { useWorkday } from '@/hooks/useWorkday';
 import { clsx } from 'clsx';
 
 export default function TicketList() {
   const navigate = useNavigate();
   const { getFilteredTickets, getTicketStats, setFilterOptions } = useTicketStore();
+  const { getDeadlineLabel, getRiskLevel } = useWorkday();
   
   const tickets = getFilteredTickets();
   const stats = getTicketStats();

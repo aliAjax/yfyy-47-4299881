@@ -28,7 +28,8 @@ import { useTicketStore } from '@/store/useTicketStore';
 import { useContactStore } from '@/store/useContactStore';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timeline } from '@/components/Timeline';
-import { getRiskLevel, getDeadlineLabel, generateId, formatDateTime, formatFileSize } from '@/utils/date';
+import { generateId, formatDateTime, formatFileSize } from '@/utils/date';
+import { useWorkday } from '@/hooks/useWorkday';
 import { Attachment, HandlerUnit } from '@/types';
 import { getMatchReasonText } from '@/utils/dispatchRule';
 import { clsx } from 'clsx';
@@ -48,6 +49,7 @@ export default function TicketDetail() {
     returnTicket
   } = useTicketStore();
   const { getOnDutyContact, getContactsByUnit } = useContactStore();
+  const { getRiskLevel, getDeadlineLabel } = useWorkday();
   
   const ticket = getTicketById(id || '');
   

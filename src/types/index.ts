@@ -204,3 +204,39 @@ export interface DispatchRecommendation {
   hasConflict: boolean;
   conflictReason?: string;
 }
+
+export type HolidayType = 'holiday' | 'workday';
+
+export interface HolidayConfig {
+  id: string;
+  date: string;
+  name: string;
+  type: HolidayType;
+  year: number;
+  createTime: string;
+  updateTime: string;
+}
+
+export interface SLARule {
+  id: string;
+  name: string;
+  category: TicketCategory | '';
+  handlerUnit: HandlerUnit | '';
+  deadlineDays: number;
+  priority: number;
+  enabled: boolean;
+  description?: string;
+  createTime: string;
+  updateTime: string;
+}
+
+export interface SLAMatchResult {
+  rule: SLARule;
+  matchedFields: string[];
+  score: number;
+}
+
+export interface SLARecommendation {
+  deadlineDays: number | null;
+  matchedRules: SLAMatchResult[];
+}

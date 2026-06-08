@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 import { Ticket, TicketStatus, ProgressLog, FilterOptions, UrgeRecord, ReturnRecord, Attachment, DispatchInfo } from '@/types';
 import { mockTickets } from '@/data/mockData';
 import { generateId, formatDateTime } from '@/utils/date';
+import { getWorkdaysRemaining } from '@/utils/workday';
+import { useHolidayStore } from './useHolidayStore';
 
 interface TicketState {
   tickets: Ticket[];
@@ -64,6 +66,21 @@ const initialFilterOptions: FilterOptions = {
   deadlineRange: '',
 };
 
+function getHolidayDatesSafe(): { holidayDates: string[]; workdayDates: string[] } {
+  try {
+    const state = useHolidayStore?.getState?.();
+    if (state && typeof state.getHolidayDatesByType === 'function') {
+      return {
+        holidayDates: state.getHolidayDatesByType('holiday') || [],
+        workdayDates: state.getHolidayDatesByType('workday') || [],
+      };
+    }
+  } catch (e) {
+    // ignore
+  }
+  return { holidayDates: [], workdayDates: [] };
+}
+
 export const useTicketStore = create<TicketState>()(
   persist(
     (set, get) => ({
@@ -106,16 +123,16 @@ export const useTicketStore = create<TicketState>()(
           filtered = filtered.filter(t => t.category === filterOptions.category);
         }
         if (filterOptions.deadlineRange) {
-          const now = new Date();
+          const { holidayDates, workdayDates } = getHolidayDatesSafe();
+          
           filtered = filtered.filter(t => {
-            const deadline = new Date(t.deadline);
-            const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
             switch (filterOptions.deadlineRange) {
-              case 'overdue': return diffDays < 0;
-              case 'today': return diffDays === 0;
-              case '3days': return diffDays >= 0 && diffDays <= 3;
-              case '7days': return diffDays >= 0 && diffDays <= 7;
-              case '15days': return diffDays >= 0 && diffDays <= 15;
+              case 'overdue': return remaining < 0;
+              case 'today': return remaining === 0;
+              case '3days': return remaining >= 0 && remaining <= 3;
+              case '7days': return remaining >= 0 && remaining <= 7;
+              case '15days': return remaining >= 0 && remaining <= 15;
               default: return true;
             }
           });
@@ -130,11 +147,19 @@ export const useTicketStore = create<TicketState>()(
         if (currentRole === 'handler' && currentUnit) {
           list = list.filter(t => t.handlerUnit === currentUnit);
         }
+        
+        const { holidayDates, workdayDates } = getHolidayDatesSafe();
+        
         return {
           pending: list.filter(t => t.status === 'pending').length,
           processing: list.filter(t => t.status === 'processing').length,
           completed: list.filter(t => t.status === 'completed').length,
-          overdue: list.filter(t => t.status === 'overdue' || (t.status !== 'completed' && new Date(t.deadline) < new Date())).length,
+          overdue: list.filter(t => {
+            if (t.status === 'overdue') return true;
+            if (t.status === 'completed') return false;
+            const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
+            return remaining < 0;
+          }).length,
         };
       },
 
@@ -335,20 +360,20 @@ export const useTicketStore = create<TicketState>()(
           list = list.filter(t => t.handlerUnit === currentUnit);
         }
         
-        const now = new Date();
+        const { holidayDates, workdayDates } = getHolidayDatesSafe();
+        
         const high: Ticket[] = [];
         const medium: Ticket[] = [];
         const low: Ticket[] = [];
 
         list.forEach(t => {
-          const deadline = new Date(t.deadline);
-          const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
           
-          if (diffDays < 0 || t.status === 'overdue') {
+          if (remaining < 0 || t.status === 'overdue') {
             high.push(t);
-          } else if (diffDays <= 1) {
+          } else if (remaining <= 1) {
             high.push(t);
-          } else if (diffDays <= 3) {
+          } else if (remaining <= 3) {
             medium.push(t);
           } else {
             low.push(t);
@@ -375,13 +400,13 @@ export const useTicketStore = create<TicketState>()(
       getHandlerTodoStats: () => {
         const { tickets, currentUnit } = get();
         const list = tickets.filter(t => t.handlerUnit === currentUnit);
-        const now = new Date();
+        
+        const { holidayDates, workdayDates } = getHolidayDatesSafe();
         
         const upcomingDeadline = list.filter(t => {
           if (t.status === 'completed') return false;
-          const deadline = new Date(t.deadline);
-          const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          return diffDays >= 0 && diffDays <= 3;
+          const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
+          return remaining >= 0 && remaining <= 3;
         }).length;
 
         return {
@@ -395,7 +420,8 @@ export const useTicketStore = create<TicketState>()(
       getHandlerTodoTickets: (type) => {
         const { tickets, currentUnit } = get();
         const list = tickets.filter(t => t.handlerUnit === currentUnit);
-        const now = new Date();
+        
+        const { holidayDates, workdayDates } = getHolidayDatesSafe();
 
         switch (type) {
           case 'pending':
@@ -410,9 +436,8 @@ export const useTicketStore = create<TicketState>()(
           case 'upcoming':
             return list.filter(t => {
               if (t.status === 'completed') return false;
-              const deadline = new Date(t.deadline);
-              const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-              return diffDays >= 0 && diffDays <= 3;
+              const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
+              return remaining >= 0 && remaining <= 3;
             }).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
           default:
             return [];
@@ -421,20 +446,19 @@ export const useTicketStore = create<TicketState>()(
 
       getSupervisorTodoStats: () => {
         const { tickets } = get();
-        const now = new Date();
+        
+        const { holidayDates, workdayDates } = getHolidayDatesSafe();
         
         const highRisk = tickets.filter(t => {
           if (t.status === 'completed') return false;
-          const deadline = new Date(t.deadline);
-          const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          return diffDays < 0 || t.status === 'overdue' || diffDays <= 1;
+          const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
+          return remaining < 0 || t.status === 'overdue' || remaining <= 1;
         }).length;
 
         const pendingUrge = tickets.filter(t => {
           if (t.status === 'completed') return false;
-          const deadline = new Date(t.deadline);
-          const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          return diffDays <= 3 && diffDays >= 0 && t.urgeRecords.length === 0;
+          const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
+          return remaining <= 3 && remaining >= 0 && t.urgeRecords.length === 0;
         }).length;
 
         const returned = tickets.filter(t => t.status === 'returned').length;
@@ -444,22 +468,21 @@ export const useTicketStore = create<TicketState>()(
 
       getSupervisorTodoTickets: (type) => {
         const { tickets } = get();
-        const now = new Date();
+        
+        const { holidayDates, workdayDates } = getHolidayDatesSafe();
 
         switch (type) {
           case 'highRisk':
             return tickets.filter(t => {
               if (t.status === 'completed') return false;
-              const deadline = new Date(t.deadline);
-              const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-              return diffDays < 0 || t.status === 'overdue' || diffDays <= 1;
+              const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
+              return remaining < 0 || t.status === 'overdue' || remaining <= 1;
             }).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
           case 'pendingUrge':
             return tickets.filter(t => {
               if (t.status === 'completed') return false;
-              const deadline = new Date(t.deadline);
-              const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-              return diffDays <= 3 && diffDays >= 0 && t.urgeRecords.length === 0;
+              const remaining = getWorkdaysRemaining(t.deadline, new Date(), holidayDates, workdayDates);
+              return remaining <= 3 && remaining >= 0 && t.urgeRecords.length === 0;
             }).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
           case 'returned':
             return tickets.filter(t => t.status === 'returned')

@@ -16,7 +16,8 @@ import {
 import { useTicketStore } from '@/store/useTicketStore';
 import { parseCsv, generateSampleCsv, CsvParseResult } from '@/utils/csvParser';
 import { TicketCategory, Area, HandlerUnit, CATEGORIES, AREAS, HANDLER_UNITS } from '@/types';
-import { formatDate, addDays } from '@/utils/date';
+import { formatDate } from '@/utils/date';
+import { useWorkday } from '@/hooks/useWorkday';
 import { clsx } from 'clsx';
 
 type InputMode = 'upload' | 'paste';
@@ -25,6 +26,7 @@ export default function BatchImport() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { batchAddTickets } = useTicketStore();
+  const { calculateDeadline } = useWorkday();
 
   const [inputMode, setInputMode] = useState<InputMode>('upload');
   const [csvText, setCsvText] = useState('');
@@ -94,7 +96,7 @@ export default function BatchImport() {
         content: row.content.trim(),
         handlerUnit: row.handlerUnit.trim() as HandlerUnit,
         assignTime: formatDate(new Date()) + ' ' + new Date().toTimeString().slice(0, 5),
-        deadline: formatDate(addDays(new Date(), deadlineDays)),
+        deadline: calculateDeadline(new Date(), deadlineDays),
       };
     });
 
@@ -337,7 +339,7 @@ export default function BatchImport() {
                 <p className="font-medium">CSV 文件格式说明</p>
                 <ul className="list-disc list-inside space-y-0.5 text-blue-700">
                   <li>必需字段：诉求标题、诉求类型、所属区域、诉求内容、承办单位</li>
-                  <li>可选字段：办理期限（天数，默认为 7 天）</li>
+                  <li>可选字段：办理期限（工作日，默认为 7 个工作日）</li>
                   <li>诉求类型可选值：{CATEGORIES.join('、')}</li>
                   <li>所属区域可选值：{AREAS.join('、')}</li>
                   <li>承办单位可选值：{HANDLER_UNITS.join('、')}</li>
@@ -441,7 +443,7 @@ export default function BatchImport() {
                     承办单位
                   </th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500 text-xs uppercase tracking-wider">
-                    办理期限
+                    办理期限（工作日）
                   </th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500 text-xs uppercase tracking-wider">
                     状态
@@ -491,7 +493,7 @@ export default function BatchImport() {
                         'px-4 py-3',
                         errorFields.includes('deadline') && 'text-red-600'
                       )}>
-                        {row.deadline ? `${row.deadline} 天` : <span className="text-gray-400">默认 7 天</span>}
+                        {row.deadline ? `${row.deadline} 个工作日` : <span className="text-gray-400">默认 7 个工作日</span>}
                       </td>
                       <td className="px-4 py-3">
                         {hasError ? (

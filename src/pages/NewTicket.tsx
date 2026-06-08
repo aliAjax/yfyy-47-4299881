@@ -18,14 +18,18 @@ import {
   Zap,
   CheckCircle2,
   X,
-  Info
+  Info,
+  Clock
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { useContactStore } from '@/store/useContactStore';
 import { useDispatchRuleStore } from '@/store/useDispatchRuleStore';
-import { CATEGORIES, AREAS, HANDLER_UNITS, TicketCategory, Area, HandlerUnit, MatchResult } from '@/types';
-import { formatDate, addDays } from '@/utils/date';
+import { useSLARuleStore } from '@/store/useSLARuleStore';
+import { useWorkday } from '@/hooks/useWorkday';
+import { CATEGORIES, AREAS, HANDLER_UNITS, TicketCategory, Area, HandlerUnit, MatchResult, SLAMatchResult } from '@/types';
+import { formatDate } from '@/utils/date';
 import { getDispatchRecommendation, getMatchReasonText } from '@/utils/dispatchRule';
+import { getSLARecommendation, getSLAMatchReasonText } from '@/utils/slaRule';
 import { clsx } from 'clsx';
 
 export default function NewTicket() {
@@ -33,6 +37,8 @@ export default function NewTicket() {
   const { addTicket } = useTicketStore();
   const { getOnDutyContact, getContactsByUnit } = useContactStore();
   const { getEnabledRules } = useDispatchRuleStore();
+  const { getEnabledRules: getEnabledSLARules } = useSLARuleStore();
+  const { calculateDeadline } = useWorkday();
 
   const [formData, setFormData] = useState({
     title: '',
@@ -49,6 +55,7 @@ export default function NewTicket() {
   const [showRecommendation, setShowRecommendation] = useState(true);
 
   const rules = useMemo(() => getEnabledRules(), [getEnabledRules]);
+  const slaRules = useMemo(() => getEnabledSLARules(), [getEnabledSLARules]);
 
   const recommendation = useMemo(() => {
     if (!formData.title && !formData.content && !formData.category) {
@@ -62,12 +69,38 @@ export default function NewTicket() {
     });
   }, [formData.title, formData.content, formData.category, formData.area, rules]);
 
+  const slaRecommendation = useMemo(() => {
+    if (!formData.category && !formData.handlerUnit) {
+      return null;
+    }
+    return getSLARecommendation(slaRules, {
+      category: formData.category,
+      handlerUnit: formData.handlerUnit,
+    });
+  }, [formData.category, formData.handlerUnit, slaRules]);
+
   const hasRecommendation = recommendation && recommendation.handlerUnit;
+  const hasSLARecommendation = slaRecommendation && slaRecommendation.deadlineDays !== null;
+
+  const effectiveDeadlineDays = useMemo(() => {
+    if (hasSLARecommendation && slaRecommendation?.deadlineDays) {
+      return slaRecommendation.deadlineDays;
+    }
+    if (recommendation?.deadlineDays) {
+      return recommendation.deadlineDays;
+    }
+    return 7;
+  }, [slaRecommendation, recommendation, hasSLARecommendation]);
 
   const shouldShowSuggestion = hasRecommendation && showRecommendation && (
     (formData.handlerUnit !== recommendation.handlerUnit) ||
-    (formData.deadlineDays !== String(recommendation.deadlineDays))
+    (formData.deadlineDays !== String(effectiveDeadlineDays))
   );
+
+  const deadlineDateStr = useMemo(() => {
+    const days = parseInt(formData.deadlineDays) || 7;
+    return calculateDeadline(new Date(), days);
+  }, [formData.deadlineDays, calculateDeadline]);
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -83,10 +116,10 @@ export default function NewTicket() {
   const handleSubmit = () => {
     if (!validate()) return;
 
-    const deadline = formatDate(addDays(new Date(), parseInt(formData.deadlineDays)));
+    const deadline = deadlineDateStr;
 
     const isRecommendedUnit = recommendation?.handlerUnit && formData.handlerUnit === recommendation.handlerUnit;
-    const isRecommendedDeadline = recommendation?.deadlineDays && formData.deadlineDays === String(recommendation.deadlineDays);
+    const isRecommendedDeadline = formData.deadlineDays === String(effectiveDeadlineDays);
     const appliedRecommendation = isRecommendedUnit && isRecommendedDeadline;
 
     let dispatchMethod: 'auto' | 'manual' | 'recommended' = 'manual';
@@ -105,7 +138,7 @@ export default function NewTicket() {
         score: m.score,
       })),
       recommendedUnit: recommendation.handlerUnit,
-      recommendedDeadlineDays: recommendation.deadlineDays,
+      recommendedDeadlineDays: effectiveDeadlineDays,
       appliedRecommendation,
       hasConflict: recommendation.hasConflict,
       dispatchMethod,
@@ -151,7 +184,7 @@ export default function NewTicket() {
       setFormData(prev => ({
         ...prev,
         handlerUnit: recommendation.handlerUnit as HandlerUnit,
-        deadlineDays: String(recommendation.deadlineDays || 7),
+        deadlineDays: String(effectiveDeadlineDays || 7),
       }));
       setHasUserModifiedUnit(false);
       setHasUserModifiedDeadline(false);
@@ -374,12 +407,12 @@ export default function NewTicket() {
                 {/* 办理期限 */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    <Calendar className="inline h-4 w-4 mr-1 text-gray-400" />
-                    办理期限
-                    {hasRecommendation && formData.deadlineDays === String(recommendation?.deadlineDays) && (
+                    <Clock className="inline h-4 w-4 mr-1 text-gray-400" />
+                    办理期限（工作日）
+                    {hasSLARecommendation && formData.deadlineDays === String(slaRecommendation?.deadlineDays) && (
                       <span className="ml-2 inline-flex items-center text-xs text-green-600">
                         <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                        推荐期限
+                        SLA推荐
                       </span>
                     )}
                   </label>
@@ -388,16 +421,17 @@ export default function NewTicket() {
                     onChange={(e) => handleChange('deadlineDays', e.target.value)}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-all"
                   >
-                    <option value="1">1 天（紧急）</option>
-                    <option value="3">3 天</option>
-                    <option value="5">5 天</option>
-                    <option value="7">7 天</option>
-                    <option value="10">10 天</option>
-                    <option value="15">15 天</option>
-                    <option value="30">30 天</option>
+                    <option value="1">1 个工作日（紧急）</option>
+                    <option value="3">3 个工作日</option>
+                    <option value="5">5 个工作日</option>
+                    <option value="7">7 个工作日</option>
+                    <option value="10">10 个工作日</option>
+                    <option value="15">15 个工作日</option>
+                    <option value="30">30 个工作日</option>
                   </select>
                   <p className="mt-1 text-xs text-gray-500">
-                    截止日期：{formatDate(addDays(new Date(), parseInt(formData.deadlineDays)))}
+                    截止日期：{deadlineDateStr}
+                    <span className="ml-1 text-primary-500">（按工作日计算）</span>
                   </p>
                 </div>
               </div>
@@ -533,7 +567,7 @@ export default function NewTicket() {
                     <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-medium text-gray-500">推荐办理期限</span>
-                        {!hasUserModifiedDeadline && formData.deadlineDays === String(recommendation?.deadlineDays) && (
+                        {!hasUserModifiedDeadline && formData.deadlineDays === String(effectiveDeadlineDays) && (
                           <span className="inline-flex items-center text-xs text-green-600">
                             <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                             已应用
@@ -541,11 +575,16 @@ export default function NewTicket() {
                         )}
                       </div>
                       <p className="text-sm font-semibold text-gray-900">
-                        {recommendation?.deadlineDays} 天
+                        {effectiveDeadlineDays} 个工作日
                         <span className="text-xs font-normal text-gray-500 ml-2">
-                          （截止：{formatDate(addDays(new Date(), recommendation?.deadlineDays || 7))}）
+                          （截止：{calculateDeadline(new Date(), effectiveDeadlineDays || 7)}）
                         </span>
                       </p>
+                      {hasSLARecommendation && (
+                        <p className="text-xs text-primary-600 mt-1">
+                          基于SLA规则计算
+                        </p>
+                      )}
                     </div>
 
                     {/* Apply Button */}

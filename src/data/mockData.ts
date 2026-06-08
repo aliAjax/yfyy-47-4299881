@@ -1,4 +1,4 @@
-import { Ticket, TicketCategory, Area, HandlerUnit, ProgressLog, ContactPerson, DispatchRule } from '@/types';
+import { Ticket, TicketCategory, Area, HandlerUnit, ProgressLog, ContactPerson, DispatchRule, HolidayConfig, SLARule } from '@/types';
 import { addDays, formatDate, generateId, formatDateTime } from '@/utils/date';
 
 const now = new Date();
@@ -477,5 +477,178 @@ export const mockDispatchRules: DispatchRule[] = [
     1,
     200,
     '涉及安全的紧急事项'
+  ),
+];
+
+function createMockHoliday(
+  date: string,
+  name: string,
+  type: 'holiday' | 'workday'
+): HolidayConfig {
+  const nowStr = formatDateTime(new Date());
+  const year = parseInt(date.split('-')[0]);
+  return {
+    id: generateId(),
+    date,
+    name,
+    type,
+    year,
+    createTime: nowStr,
+    updateTime: nowStr,
+  };
+}
+
+export const mockHolidays: HolidayConfig[] = [
+  createMockHoliday('2026-01-01', '元旦', 'holiday'),
+  createMockHoliday('2026-02-16', '春节', 'holiday'),
+  createMockHoliday('2026-02-17', '春节', 'holiday'),
+  createMockHoliday('2026-02-18', '春节', 'holiday'),
+  createMockHoliday('2026-02-19', '春节', 'holiday'),
+  createMockHoliday('2026-02-20', '春节', 'holiday'),
+  createMockHoliday('2026-02-14', '春节调休上班', 'workday'),
+  createMockHoliday('2026-02-22', '春节调休上班', 'workday'),
+  createMockHoliday('2026-04-04', '清明节', 'holiday'),
+  createMockHoliday('2026-04-05', '清明节', 'holiday'),
+  createMockHoliday('2026-04-06', '清明节', 'holiday'),
+  createMockHoliday('2026-05-01', '劳动节', 'holiday'),
+  createMockHoliday('2026-05-02', '劳动节', 'holiday'),
+  createMockHoliday('2026-05-03', '劳动节', 'holiday'),
+  createMockHoliday('2026-05-04', '劳动节', 'holiday'),
+  createMockHoliday('2026-05-05', '劳动节', 'holiday'),
+  createMockHoliday('2026-04-26', '劳动节调休上班', 'workday'),
+  createMockHoliday('2026-05-09', '劳动节调休上班', 'workday'),
+  createMockHoliday('2026-06-19', '端午节', 'holiday'),
+  createMockHoliday('2026-06-20', '端午节', 'holiday'),
+  createMockHoliday('2026-06-21', '端午节', 'holiday'),
+  createMockHoliday('2026-10-01', '国庆节', 'holiday'),
+  createMockHoliday('2026-10-02', '国庆节', 'holiday'),
+  createMockHoliday('2026-10-03', '国庆节', 'holiday'),
+  createMockHoliday('2026-10-04', '国庆节', 'holiday'),
+  createMockHoliday('2026-10-05', '国庆节', 'holiday'),
+  createMockHoliday('2026-10-06', '国庆节', 'holiday'),
+  createMockHoliday('2026-10-07', '国庆节', 'holiday'),
+  createMockHoliday('2026-09-27', '国庆节调休上班', 'workday'),
+  createMockHoliday('2026-10-10', '国庆节调休上班', 'workday'),
+];
+
+function createMockSLARule(
+  name: string,
+  category: TicketCategory | '',
+  handlerUnit: HandlerUnit | '',
+  deadlineDays: number,
+  priority: number,
+  description?: string
+): SLARule {
+  const nowStr = formatDateTime(new Date());
+  return {
+    id: generateId(),
+    name,
+    category,
+    handlerUnit,
+    deadlineDays,
+    priority,
+    enabled: true,
+    description,
+    createTime: nowStr,
+    updateTime: nowStr,
+  };
+}
+
+export const mockSLARules: SLARule[] = [
+  createMockSLARule(
+    '紧急事项通用规则',
+    '',
+    '',
+    1,
+    200,
+    '涉及安全的紧急事项，1个工作日内办结'
+  ),
+  createMockSLARule(
+    '城市管理-常规',
+    '城市管理',
+    '',
+    7,
+    100,
+    '城市管理类诉求，7个工作日内办结'
+  ),
+  createMockSLARule(
+    '交通运输-常规',
+    '交通运输',
+    '',
+    5,
+    100,
+    '交通运输类诉求，5个工作日内办结'
+  ),
+  createMockSLARule(
+    '住房建设-常规',
+    '住房建设',
+    '',
+    10,
+    100,
+    '住房建设类诉求，10个工作日内办结'
+  ),
+  createMockSLARule(
+    '劳动社保-常规',
+    '劳动社保',
+    '',
+    5,
+    100,
+    '劳动社保类诉求，5个工作日内办结'
+  ),
+  createMockSLARule(
+    '教育文化-常规',
+    '教育文化',
+    '',
+    10,
+    100,
+    '教育文化类诉求，10个工作日内办结'
+  ),
+  createMockSLARule(
+    '医疗卫生-常规',
+    '医疗卫生',
+    '',
+    7,
+    100,
+    '医疗卫生类诉求，7个工作日内办结'
+  ),
+  createMockSLARule(
+    '环境保护-加急',
+    '环境保护',
+    '',
+    3,
+    120,
+    '环境保护类诉求，3个工作日内办结'
+  ),
+  createMockSLARule(
+    '市场监管-常规',
+    '市场监管',
+    '',
+    7,
+    100,
+    '市场监管类诉求，7个工作日内办结'
+  ),
+  createMockSLARule(
+    '生态环境局-特别加急',
+    '环境保护',
+    '生态环境局',
+    2,
+    150,
+    '生态环境局承办的环保诉求，2个工作日内办结'
+  ),
+  createMockSLARule(
+    '市场监管局-食品安全加急',
+    '市场监管',
+    '市场监督管理局',
+    3,
+    150,
+    '市场监管局承办的食品安全诉求，3个工作日内办结'
+  ),
+  createMockSLARule(
+    '默认规则',
+    '',
+    '',
+    7,
+    0,
+    '默认办理期限，7个工作日'
   ),
 ];

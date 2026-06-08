@@ -8,6 +8,8 @@ import BatchImport from "@/pages/BatchImport";
 import MyTodo from "@/pages/MyTodo";
 import ContactBook from "@/pages/ContactBook";
 import DispatchRules from "@/pages/DispatchRules";
+import HolidayConfig from "@/pages/HolidayConfig";
+import SLARules from "@/pages/SLARules";
 
 export default function App() {
   return (
@@ -22,6 +24,8 @@ export default function App() {
           <Route path="/supervision" element={<Supervision />} />
           <Route path="/contacts" element={<ContactBook />} />
           <Route path="/dispatch-rules" element={<DispatchRules />} />
+          <Route path="/sla-rules" element={<SLARules />} />
+          <Route path="/holiday-config" element={<HolidayConfig />} />
         </Route>
       </Routes>
     </Router>

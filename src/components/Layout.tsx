@@ -12,7 +12,9 @@ import {
   Upload,
   LayoutDashboard,
   BookOpen,
-  Settings
+  Settings,
+  Clock,
+  CalendarClock
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { clsx } from 'clsx';
@@ -25,6 +27,8 @@ const navItems = [
   { path: '/supervision', label: '督办中心', icon: AlertTriangle },
   { path: '/contacts', label: '通讯录', icon: BookOpen },
   { path: '/dispatch-rules', label: '分派规则', icon: Settings },
+  { path: '/sla-rules', label: 'SLA时限', icon: Clock },
+  { path: '/holiday-config', label: '节假日配置', icon: CalendarClock },
 ];
 
 export function Layout() {

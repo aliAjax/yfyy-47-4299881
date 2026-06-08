@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   AlertTriangle, 
@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { StatusBadge } from '@/components/StatusBadge';
-import { getDeadlineLabel, getDaysRemaining } from '@/utils/date';
+import { useWorkday } from '@/hooks/useWorkday';
 import { clsx } from 'clsx';
 
 type TabType = 'risk' | 'pendingUrge' | 'urge' | 'return';
@@ -24,6 +24,7 @@ export default function Supervision() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { getRiskTickets, getUrgeRecords, getReturnRecords, getSupervisorTodoTickets, tickets } = useTicketStore();
+  const { getDeadlineLabel, getWorkdaysRemaining: getDaysRemaining, getRiskLevel } = useWorkday();
   
   const tabFromUrl = searchParams.get('tab') as TabType | null;
   const initialTab = tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : 'risk';

@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { StatusBadge } from '@/components/StatusBadge';
-import { getDeadlineLabel, getRiskLevel } from '@/utils/date';
+import { useWorkday } from '@/hooks/useWorkday';
 import { Ticket, TicketStatus } from '@/types';
 import { clsx } from 'clsx';
 
@@ -131,6 +131,7 @@ function TodoCard({ title, count, icon: Icon, color, children, onViewAll }: Todo
 
 function TicketItem({ ticket, showUnit = false }: TicketItemProps) {
   const navigate = useNavigate();
+  const { getRiskLevel, getDeadlineLabel } = useWorkday();
   const risk = getRiskLevel(ticket.deadline, ticket.status);
 
   const deadlineClass = clsx(
