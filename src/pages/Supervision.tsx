@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   AlertTriangle, 
   Clock, 
@@ -18,10 +18,27 @@ import { clsx } from 'clsx';
 
 type TabType = 'risk' | 'urge' | 'return';
 
+const VALID_TABS: TabType[] = ['risk', 'urge', 'return'];
+
 export default function Supervision() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { getRiskTickets, getUrgeRecords, getReturnRecords, tickets } = useTicketStore();
-  const [activeTab, setActiveTab] = useState<TabType>('risk');
+  
+  const tabFromUrl = searchParams.get('tab') as TabType | null;
+  const initialTab = tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : 'risk';
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+
+  useEffect(() => {
+    if (tabFromUrl && VALID_TABS.includes(tabFromUrl)) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
+
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    navigate(`/supervision?tab=${tab}`, { replace: true });
+  };
   
   const riskTickets = getRiskTickets();
   const urgeRecords = getUrgeRecords();
@@ -94,7 +111,7 @@ export default function Supervision() {
             return (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => handleTabChange(tab.key)}
                 className={clsx(
                   'flex items-center space-x-2 px-6 py-4 text-sm font-medium transition-all border-b-2 -mb-px',
                   activeTab === tab.key

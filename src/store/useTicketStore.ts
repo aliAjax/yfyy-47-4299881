@@ -370,7 +370,7 @@ export const useTicketStore = create<TicketState>()(
 
       getHandlerTodoStats: () => {
         const { tickets, currentUnit } = get();
-        let list = tickets.filter(t => t.handlerUnit === currentUnit);
+        const list = tickets.filter(t => t.handlerUnit === currentUnit);
         const now = new Date();
         
         const upcomingDeadline = list.filter(t => {
@@ -390,7 +390,7 @@ export const useTicketStore = create<TicketState>()(
 
       getHandlerTodoTickets: (type) => {
         const { tickets, currentUnit } = get();
-        let list = tickets.filter(t => t.handlerUnit === currentUnit);
+        const list = tickets.filter(t => t.handlerUnit === currentUnit);
         const now = new Date();
 
         switch (type) {
