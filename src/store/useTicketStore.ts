@@ -55,6 +55,14 @@ interface TicketState {
     dissatisfied: number;
     veryDissatisfied: number;
   };
+
+  getArchiveGroupStats: () => {
+    byHandlerUnit: Record<string, number>;
+    byCategory: Record<string, number>;
+    bySatisfaction: Record<string, number>;
+    byQuality: Record<string, number>;
+    byCoOrganizer: Record<string, number>;
+  };
   
   getRiskTickets: () => { high: Ticket[]; medium: Ticket[]; low: Ticket[] };
   getUrgeRecords: () => UrgeRecord[];
@@ -543,15 +551,7 @@ export const useTicketStore = create<TicketState>()(
       },
 
       getArchiveStats: () => {
-        const { tickets, currentRole, currentUnit } = get();
-        let list = tickets.filter(t => t.status === 'archived' && t.archiveInfo);
-        if (currentRole === 'handler' && currentUnit) {
-          list = list.filter(t => 
-            t.handlerUnit === currentUnit || 
-            t.coOrganizers?.some(co => co.unit === currentUnit)
-          );
-        }
-        
+        const list = get().getArchivedTickets();
         return {
           total: list.length,
           verySatisfied: list.filter(t => t.archiveInfo?.satisfaction === 'very_satisfied').length,
@@ -560,6 +560,31 @@ export const useTicketStore = create<TicketState>()(
           dissatisfied: list.filter(t => t.archiveInfo?.satisfaction === 'dissatisfied').length,
           veryDissatisfied: list.filter(t => t.archiveInfo?.satisfaction === 'very_dissatisfied').length,
         };
+      },
+
+      getArchiveGroupStats: () => {
+        const list = get().getArchivedTickets();
+        const byHandlerUnit: Record<string, number> = {};
+        const byCategory: Record<string, number> = {};
+        const bySatisfaction: Record<string, number> = {};
+        const byQuality: Record<string, number> = {};
+        const byCoOrganizer: Record<string, number> = { yes: 0, no: 0 };
+
+        list.forEach(t => {
+          byHandlerUnit[t.handlerUnit] = (byHandlerUnit[t.handlerUnit] || 0) + 1;
+          byCategory[t.category] = (byCategory[t.category] || 0) + 1;
+          const sat = t.archiveInfo?.satisfaction || 'neutral';
+          bySatisfaction[sat] = (bySatisfaction[sat] || 0) + 1;
+          const quality = t.archiveInfo?.quality || 'average';
+          byQuality[quality] = (byQuality[quality] || 0) + 1;
+          if (t.coOrganizers && t.coOrganizers.length > 0) {
+            byCoOrganizer.yes += 1;
+          } else {
+            byCoOrganizer.no += 1;
+          }
+        });
+
+        return { byHandlerUnit, byCategory, bySatisfaction, byQuality, byCoOrganizer };
       },
 
       getRiskTickets: () => {

@@ -1,25 +1,106 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Archive, Star, ChevronRight, Filter, X, Building2, Tag, Clock, ThumbsUp, ThumbsDown, Minus, Users } from 'lucide-react';
+import { Archive, Star, ChevronRight, Filter, X, Building2, Tag, Clock, ThumbsUp, ThumbsDown, Minus, Users, BarChart3, ChevronDown, ChevronUp, Award } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { StatsCard } from '@/components/StatsCard';
-import { HandlerUnit, TicketCategory, SatisfactionLevel, HANDLER_UNITS, CATEGORIES, SATISFACTION_LABELS, QUALITY_LABELS } from '@/types';
+import { HandlerUnit, TicketCategory, SatisfactionLevel, QualityLevel, HANDLER_UNITS, CATEGORIES, SATISFACTION_LABELS, QUALITY_LABELS } from '@/types';
 import { clsx } from 'clsx';
 
 export default function ArchiveList() {
   const navigate = useNavigate();
-  const { 
-    getArchivedTickets, 
-    getArchiveStats, 
+  const {
+    getArchivedTickets,
+    getArchiveStats,
+    getArchiveGroupStats,
     archiveFilterOptions,
     setArchiveFilterOptions,
     resetArchiveFilters,
   } = useTicketStore();
   
   const [showFilters, setShowFilters] = useState(false);
+  const [showGroupStats, setShowGroupStats] = useState(true);
 
   const tickets = getArchivedTickets();
   const stats = getArchiveStats();
+  const groupStats = useMemo(() => getArchiveGroupStats(), [
+    archiveFilterOptions.handlerUnit,
+    archiveFilterOptions.category,
+    archiveFilterOptions.satisfaction,
+    archiveFilterOptions.archiveTimeRange,
+    archiveFilterOptions.hasCoOrganizer,
+  ]);
+
+  const totalCount = tickets.length;
+
+  const sortedHandlerUnits = useMemo(() => {
+    return Object.entries(groupStats.byHandlerUnit)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);
+  }, [groupStats]);
+
+  const sortedCategories = useMemo(() => {
+    return Object.entries(groupStats.byCategory)
+      .sort((a, b) => b[1] - a[1]);
+  }, [groupStats]);
+
+  const sortedSatisfactions = useMemo(() => {
+    return (['very_satisfied', 'satisfied', 'neutral', 'dissatisfied', 'very_dissatisfied'] as SatisfactionLevel[])
+      .map(level => [level, groupStats.bySatisfaction[level] || 0] as const)
+      .filter(([, count]) => count > 0);
+  }, [groupStats]);
+
+  const sortedQualities = useMemo(() => {
+    return (['excellent', 'good', 'average', 'poor', 'very_poor'] as QualityLevel[])
+      .map(level => [level, groupStats.byQuality?.[level] || 0] as const)
+      .filter(([, count]) => count > 0);
+  }, [groupStats]);
+
+  const coOrganizerStats = useMemo(() => {
+    return [
+      { key: 'yes', label: '有协办', count: groupStats.byCoOrganizer?.yes || 0 },
+      { key: 'no', label: '无协办', count: groupStats.byCoOrganizer?.no || 0 },
+    ].filter(item => item.count > 0);
+  }, [groupStats]);
+
+  const getQualityBarColor = (level: QualityLevel) => {
+    switch (level) {
+      case 'excellent': return 'bg-emerald-500';
+      case 'good': return 'bg-teal-500';
+      case 'average': return 'bg-gray-400';
+      case 'poor': return 'bg-orange-500';
+      case 'very_poor': return 'bg-red-500';
+    }
+  };
+
+  const getQualityTextColor = (level: QualityLevel) => {
+    switch (level) {
+      case 'excellent': return 'text-emerald-700 hover:bg-emerald-50';
+      case 'good': return 'text-teal-700 hover:bg-teal-50';
+      case 'average': return 'text-gray-700 hover:bg-gray-50';
+      case 'poor': return 'text-orange-700 hover:bg-orange-50';
+      case 'very_poor': return 'text-red-700 hover:bg-red-50';
+    }
+  };
+
+  const getSatisfactionBarColor = (level: SatisfactionLevel) => {
+    switch (level) {
+      case 'very_satisfied': return 'bg-green-500';
+      case 'satisfied': return 'bg-blue-500';
+      case 'neutral': return 'bg-gray-400';
+      case 'dissatisfied': return 'bg-orange-500';
+      case 'very_dissatisfied': return 'bg-red-500';
+    }
+  };
+
+  const getSatisfactionTextColor = (level: SatisfactionLevel) => {
+    switch (level) {
+      case 'very_satisfied': return 'text-green-700 hover:bg-green-50';
+      case 'satisfied': return 'text-blue-700 hover:bg-blue-50';
+      case 'neutral': return 'text-gray-700 hover:bg-gray-50';
+      case 'dissatisfied': return 'text-orange-700 hover:bg-orange-50';
+      case 'very_dissatisfied': return 'text-red-700 hover:bg-red-50';
+    }
+  };
 
   const getSatisfactionIcon = (level: SatisfactionLevel) => {
     switch (level) {
@@ -252,6 +333,232 @@ export default function ArchiveList() {
                 </button>
               </span>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Group Statistics */}
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <div className="flex items-center space-x-2">
+            <BarChart3 className="h-4 w-4 text-gray-500" />
+            <span className="text-sm font-medium text-gray-700">统计汇总</span>
+            <span className="text-xs text-gray-400">点击可快速筛选</span>
+          </div>
+          <button
+            onClick={() => setShowGroupStats(!showGroupStats)}
+            className="inline-flex items-center text-xs text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            {showGroupStats ? (
+              <><ChevronUp className="h-4 w-4" /><span className="ml-1">收起</span></>
+            ) : (
+              <><ChevronDown className="h-4 w-4" /><span className="ml-1">展开</span></>
+            )}
+          </button>
+        </div>
+
+        {showGroupStats && (
+          <div className="grid grid-cols-1 gap-6 p-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {/* 承办单位 */}
+            <div>
+              <div className="flex items-center space-x-1.5 mb-3">
+                <Building2 className="h-4 w-4 text-indigo-500" />
+                <span className="text-sm font-medium text-gray-700">承办单位</span>
+              </div>
+              {sortedHandlerUnits.length === 0 ? (
+                <p className="text-sm text-gray-400 py-4 text-center">暂无数据</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {sortedHandlerUnits.map(([unit, count]) => {
+                    const percent = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
+                    const isActive = archiveFilterOptions.handlerUnit === unit;
+                    return (
+                      <button
+                        key={unit}
+                        onClick={() => setArchiveFilterOptions({ handlerUnit: isActive ? '' : (unit as HandlerUnit) })}
+                        className={clsx(
+                          'w-full text-left rounded-md px-2.5 py-1.5 transition-all',
+                          isActive ? 'bg-indigo-50 ring-1 ring-indigo-200' : 'hover:bg-gray-50'
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-xs font-medium text-gray-700 truncate pr-2">{unit}</span>
+                          <span className={clsx('text-xs flex-shrink-0', isActive ? 'text-indigo-600 font-semibold' : 'text-gray-500')}>{count}</span>
+                        </div>
+                        <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={clsx('h-full rounded-full transition-all', isActive ? 'bg-indigo-500' : 'bg-indigo-300')}
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 诉求类型 */}
+            <div>
+              <div className="flex items-center space-x-1.5 mb-3">
+                <Tag className="h-4 w-4 text-emerald-500" />
+                <span className="text-sm font-medium text-gray-700">诉求类型</span>
+              </div>
+              {sortedCategories.length === 0 ? (
+                <p className="text-sm text-gray-400 py-4 text-center">暂无数据</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {sortedCategories.map(([category, count]) => {
+                    const percent = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
+                    const isActive = archiveFilterOptions.category === category;
+                    return (
+                      <button
+                        key={category}
+                        onClick={() => setArchiveFilterOptions({ category: isActive ? '' : (category as TicketCategory) })}
+                        className={clsx(
+                          'w-full text-left rounded-md px-2.5 py-1.5 transition-all',
+                          isActive ? 'bg-emerald-50 ring-1 ring-emerald-200' : 'hover:bg-gray-50'
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-xs font-medium text-gray-700">{category}</span>
+                          <span className={clsx('text-xs', isActive ? 'text-emerald-600 font-semibold' : 'text-gray-500')}>{count}</span>
+                        </div>
+                        <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={clsx('h-full rounded-full transition-all', isActive ? 'bg-emerald-500' : 'bg-emerald-300')}
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 满意度 */}
+            <div>
+              <div className="flex items-center space-x-1.5 mb-3">
+                <Star className="h-4 w-4 text-amber-500" />
+                <span className="text-sm font-medium text-gray-700">满意度</span>
+              </div>
+              {sortedSatisfactions.length === 0 ? (
+                <p className="text-sm text-gray-400 py-4 text-center">暂无数据</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {sortedSatisfactions.map(([level, count]) => {
+                    const percent = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
+                    const isActive = archiveFilterOptions.satisfaction === level;
+                    return (
+                      <button
+                        key={level}
+                        onClick={() => setArchiveFilterOptions({ satisfaction: isActive ? '' : level })}
+                        className={clsx(
+                          'w-full text-left rounded-md px-2.5 py-1.5 transition-all',
+                          isActive ? 'bg-amber-50 ring-1 ring-amber-200' : 'hover:bg-gray-50'
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className={clsx('text-xs font-medium flex items-center space-x-1', isActive ? getSatisfactionTextColor(level) : 'text-gray-700')}>
+                            {getSatisfactionIcon(level)}
+                            <span>{SATISFACTION_LABELS[level]}</span>
+                          </span>
+                          <span className={clsx('text-xs', isActive ? 'text-amber-600 font-semibold' : 'text-gray-500')}>{count}</span>
+                        </div>
+                        <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={clsx('h-full rounded-full transition-all', getSatisfactionBarColor(level))}
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 办结质量 */}
+            <div>
+              <div className="flex items-center space-x-1.5 mb-3">
+                <Award className="h-4 w-4 text-purple-500" />
+                <span className="text-sm font-medium text-gray-700">办结质量</span>
+              </div>
+              {sortedQualities.length === 0 ? (
+                <p className="text-sm text-gray-400 py-4 text-center">暂无数据</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {sortedQualities.map(([level, count]) => {
+                    const percent = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
+                    const isActive = false;
+                    return (
+                      <div
+                        key={level}
+                        className={clsx(
+                          'w-full text-left rounded-md px-2.5 py-1.5 transition-all bg-gray-50'
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className={clsx('text-xs font-medium flex items-center space-x-1', isActive ? getQualityTextColor(level) : 'text-gray-700')}>
+                            <span>{QUALITY_LABELS[level]}</span>
+                          </span>
+                          <span className={clsx('text-xs', isActive ? 'text-purple-600 font-semibold' : 'text-gray-500')}>{count}</span>
+                        </div>
+                        <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={clsx('h-full rounded-full transition-all', getQualityBarColor(level))}
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 协办情况 */}
+            <div>
+              <div className="flex items-center space-x-1.5 mb-3">
+                <Users className="h-4 w-4 text-sky-500" />
+                <span className="text-sm font-medium text-gray-700">协办情况</span>
+              </div>
+              {coOrganizerStats.length === 0 ? (
+                <p className="text-sm text-gray-400 py-4 text-center">暂无数据</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {coOrganizerStats.map((item) => {
+                    const percent = totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0;
+                    const isActive = archiveFilterOptions.hasCoOrganizer === item.key;
+                    return (
+                      <button
+                        key={item.key}
+                        onClick={() => setArchiveFilterOptions({ hasCoOrganizer: isActive ? 'all' : item.key as 'yes' | 'no' })}
+                        className={clsx(
+                          'w-full text-left rounded-md px-2.5 py-1.5 transition-all',
+                          isActive ? 'bg-sky-50 ring-1 ring-sky-200' : 'hover:bg-gray-50'
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className={clsx('text-xs font-medium flex items-center space-x-1', isActive ? 'text-sky-700' : 'text-gray-700')}>
+                            <Users className={clsx('h-3.5 w-3.5', isActive ? 'text-sky-600' : 'text-gray-400')} />
+                            <span>{item.label}</span>
+                          </span>
+                          <span className={clsx('text-xs', isActive ? 'text-sky-600 font-semibold' : 'text-gray-500')}>{item.count}</span>
+                        </div>
+                        <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={clsx('h-full rounded-full transition-all', isActive ? 'bg-sky-500' : 'bg-sky-300')}
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
