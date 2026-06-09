@@ -15,7 +15,8 @@ function isSameFilterOptions(a: FilterOptions, b: FilterOptions) {
     a.area === b.area &&
     a.handlerUnit === b.handlerUnit &&
     a.category === b.category &&
-    a.deadlineRange === b.deadlineRange
+    a.deadlineRange === b.deadlineRange &&
+    (a.assignDate || '') === (b.assignDate || '')
   );
 }
 

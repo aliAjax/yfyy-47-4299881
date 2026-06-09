@@ -89,6 +89,7 @@ const initialFilterOptions: FilterOptions = {
   handlerUnit: '',
   category: '',
   deadlineRange: '',
+  assignDate: '',
 };
 
 const initialArchiveFilterOptions: ArchiveFilterOptions = {
@@ -203,6 +204,9 @@ export const useTicketStore = create<TicketState>()(
         }
         if (filterOptions.category) {
           filtered = filtered.filter(t => t.category === filterOptions.category);
+        }
+        if (filterOptions.assignDate) {
+          filtered = filtered.filter(t => t.assignTime.split(' ')[0] === filterOptions.assignDate);
         }
         if (filterOptions.deadlineRange) {
           const { holidayDates, workdayDates } = getHolidayDatesSafe();

@@ -4,6 +4,7 @@ interface PieChartProps {
   data: { label: string; value: number; color?: string }[];
   size?: number;
   innerRadius?: number;
+  onItemClick?: (item: { label: string; value: number }) => void;
 }
 
 const DEFAULT_COLORS = [
@@ -17,7 +18,7 @@ const DEFAULT_COLORS = [
   '#84cc16',
 ];
 
-export function PieChart({ data, size = 180, innerRadius = 50 }: PieChartProps) {
+export function PieChart({ data, size = 180, innerRadius = 50, onItemClick }: PieChartProps) {
   const total = useMemo(() => data.reduce((sum, item) => sum + item.value, 0), [data]);
 
   const segments = useMemo(() => {
@@ -57,6 +58,7 @@ export function PieChart({ data, size = 180, innerRadius = 50 }: PieChartProps) 
         color: item.color || DEFAULT_COLORS[index % DEFAULT_COLORS.length],
         value: item.value,
         label: item.label,
+        rawItem: item,
         percentage: total > 0 ? Math.round((item.value / total) * 100) : 0,
       };
     });
@@ -71,7 +73,8 @@ export function PieChart({ data, size = 180, innerRadius = 50 }: PieChartProps) 
               key={index}
               d={segment.path}
               fill={segment.color}
-              className="transition-all duration-300 hover:opacity-80"
+              onClick={() => onItemClick?.(segment.rawItem)}
+              className={`transition-all duration-300 hover:opacity-80 ${onItemClick && segment.value > 0 ? 'cursor-pointer' : ''}`}
             />
           ))}
           <text
@@ -94,7 +97,11 @@ export function PieChart({ data, size = 180, innerRadius = 50 }: PieChartProps) 
       </div>
       <div className="flex-1 space-y-2">
         {segments.map((segment, index) => (
-          <div key={index} className="flex items-center gap-2">
+          <div
+            key={index}
+            onClick={() => onItemClick?.(segment.rawItem)}
+            className={`flex items-center gap-2 rounded px-1 py-0.5 transition-colors ${onItemClick && segment.value > 0 ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+          >
             <div
               className="w-3 h-3 rounded-full flex-shrink-0"
               style={{ backgroundColor: segment.color }}

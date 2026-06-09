@@ -20,6 +20,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
+import { Area, AREAS, CATEGORIES, TicketCategory } from '@/types';
 import {
   getTotalStats,
   getTrendData,
@@ -45,7 +46,7 @@ import {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { tickets } = useTicketStore();
+  const { tickets, currentRole, currentUnit } = useTicketStore();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -56,15 +57,23 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  const totalStats = useMemo(() => getTotalStats(tickets), [tickets]);
-  const trendData = useMemo(() => getTrendData(tickets, 7), [tickets]);
-  const areaData = useMemo(() => getAreaDistribution(tickets), [tickets]);
-  const unitRank = useMemo(() => getUnitOverdueRank(tickets), [tickets]);
-  const categoryData = useMemo(() => getCategoryRatio(tickets), [tickets]);
-  const riskTickets = useMemo(() => getHighRiskTickets(tickets, 20), [tickets]);
-  const dynamics = useMemo(() => getRecentDynamics(tickets, 30), [tickets]);
-  const urgeCount = useMemo(() => getUrgeCount(tickets), [tickets]);
-  const returnCount = useMemo(() => getReturnCount(tickets), [tickets]);
+  const visibleTickets = useMemo(() => {
+    if (currentRole !== 'handler' || !currentUnit) return tickets;
+    return tickets.filter(ticket =>
+      ticket.handlerUnit === currentUnit ||
+      (ticket.collaborationRecords || []).some(record => record.unit === currentUnit)
+    );
+  }, [currentRole, currentUnit, tickets]);
+
+  const totalStats = useMemo(() => getTotalStats(visibleTickets), [visibleTickets]);
+  const trendData = useMemo(() => getTrendData(visibleTickets, 7), [visibleTickets]);
+  const areaData = useMemo(() => getAreaDistribution(visibleTickets), [visibleTickets]);
+  const unitRank = useMemo(() => getUnitOverdueRank(visibleTickets), [visibleTickets]);
+  const categoryData = useMemo(() => getCategoryRatio(visibleTickets), [visibleTickets]);
+  const riskTickets = useMemo(() => getHighRiskTickets(visibleTickets, 20), [visibleTickets]);
+  const dynamics = useMemo(() => getRecentDynamics(visibleTickets, 30), [visibleTickets]);
+  const urgeCount = useMemo(() => getUrgeCount(visibleTickets), [visibleTickets]);
+  const returnCount = useMemo(() => getReturnCount(visibleTickets), [visibleTickets]);
 
   const barChartData = useMemo(() =>
     areaData.map(item => ({ label: item.area, value: item.count })),
@@ -103,6 +112,27 @@ export default function Dashboard() {
     setTimeout(() => {
       setIsRefreshing(false);
     }, 1000);
+  };
+
+  const goToTickets = (params: Record<string, string> = {}) => {
+    const search = new URLSearchParams({ fromDashboard: '1', ...params });
+    navigate(`/${search.toString() ? `?${search.toString()}` : ''}`);
+  };
+
+  const goToSupervision = (params: Record<string, string> = {}) => {
+    const search = new URLSearchParams(params);
+    navigate(`/supervision${search.toString() ? `?${search.toString()}` : ''}`);
+  };
+
+  const formatAssignDate = (date: Date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  };
+
+  const getTrendAssignDate = (label: string) => {
+    const [month, day] = label.split('/').map(Number);
+    if (!month || !day) return '';
+    const now = new Date();
+    return formatAssignDate(new Date(now.getFullYear(), month - 1, day));
   };
 
   return (
@@ -145,56 +175,56 @@ export default function Dashboard() {
             value={totalStats.total}
             color="blue"
             icon={FileText}
-            onClick={() => navigate('/')}
+            onClick={() => goToTickets()}
           />
           <StatItem
             label="今日新增"
             value={totalStats.todayNew}
             color="green"
             icon={Zap}
-            onClick={() => navigate('/')}
+            onClick={() => goToTickets({ assignDate: formatAssignDate(new Date()) })}
           />
           <StatItem
             label="本周新增"
             value={totalStats.weekNew}
             color="purple"
             icon={Calendar}
-            onClick={() => navigate('/')}
+            onClick={() => goToTickets()}
           />
           <StatItem
             label="待办理"
             value={totalStats.pending}
             color="yellow"
             icon={Clock}
-            onClick={() => navigate('/')}
+            onClick={() => goToTickets({ status: 'pending' })}
           />
           <StatItem
             label="办理中"
             value={totalStats.processing}
             color="blue"
             icon={TrendingUp}
-            onClick={() => navigate('/')}
+            onClick={() => goToTickets({ status: 'processing' })}
           />
           <StatItem
             label="已办结"
             value={totalStats.completed}
             color="green"
             icon={CheckCircle}
-            onClick={() => navigate('/')}
+            onClick={() => goToTickets({ status: 'completed' })}
           />
           <StatItem
             label="已超期"
             value={totalStats.overdue}
             color="red"
             icon={AlertTriangle}
-            onClick={() => navigate('/supervision')}
+            onClick={() => goToSupervision({ tab: 'risk', riskLevel: 'high' })}
           />
           <StatItem
             label="已退回"
             value={totalStats.returned}
             color="red"
             icon={XCircle}
-            onClick={() => navigate('/supervision')}
+            onClick={() => goToSupervision({ tab: 'return' })}
           />
         </div>
       </div>
@@ -207,17 +237,44 @@ export default function Dashboard() {
             className="lg:col-span-2"
             action={<span className="text-xs text-gray-400">近7天</span>}
           >
-            <LineChart data={trendData} height={240} color="#3b82f6" />
+            <LineChart
+              data={trendData}
+              height={240}
+              color="#3b82f6"
+              onItemClick={(item) => {
+                const assignDate = getTrendAssignDate(item.date);
+                if (assignDate) goToTickets({ assignDate });
+              }}
+            />
           </DashboardCard>
 
           <DashboardCard title="诉求类型占比" icon={PieChartIcon}>
-            <PieChart data={pieChartData} size={180} innerRadius={50} />
+            <PieChart
+              data={pieChartData}
+              size={180}
+              innerRadius={50}
+              onItemClick={(item) => {
+                if (item.value > 0 && CATEGORIES.includes(item.label as TicketCategory)) {
+                  goToTickets({ category: item.label });
+                }
+              }}
+            />
           </DashboardCard>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <DashboardCard title="各区域工单分布" icon={MapPin}>
-            <BarChart data={barChartData} height={280} color="#3b82f6" horizontal={true} />
+            <BarChart
+              data={barChartData}
+              height={280}
+              color="#3b82f6"
+              horizontal={true}
+              onItemClick={(item) => {
+                if (item.value > 0 && AREAS.includes(item.label as Area)) {
+                  goToTickets({ area: item.label });
+                }
+              }}
+            />
           </DashboardCard>
 
           <DashboardCard title="承办单位超期排行" icon={BarChart3}>
@@ -231,6 +288,7 @@ export default function Dashboard() {
                   subValue={`超期率 ${item.overdueRate}%`}
                   maxValue={maxOverdue}
                   color="#ef4444"
+                  onClick={() => goToSupervision({ tab: 'risk', handlerUnit: item.unit, riskLevel: 'high' })}
                 />
               ))}
               {unitRank.length === 0 && (
@@ -244,7 +302,15 @@ export default function Dashboard() {
           <DashboardCard
             title="高风险工单"
             icon={AlertTriangle}
-            action={<span className="text-xs text-red-500 font-medium">{riskTickets.length} 个高风险</span>}
+            action={
+              <button
+                type="button"
+                onClick={() => goToSupervision({ tab: 'risk', riskLevel: 'high' })}
+                className="text-xs font-medium text-red-500 hover:text-red-600"
+              >
+                {riskTickets.length} 个高风险
+              </button>
+            }
           >
             <ScrollList height={340} speed={40}>
               {riskTickets.map(ticket => (
@@ -255,7 +321,7 @@ export default function Dashboard() {
                   unit={ticket.handlerUnit}
                   deadline={ticket.deadline}
                   remainingDays={ticket.remainingDays}
-                  onClick={() => navigate(`/tickets/${ticket.id}`)}
+                  onClick={() => goToSupervision({ tab: 'risk', riskLevel: 'high', handlerUnit: ticket.handlerUnit })}
                 />
               ))}
               {riskTickets.length === 0 && (

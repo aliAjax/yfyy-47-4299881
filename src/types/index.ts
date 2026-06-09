@@ -148,6 +148,7 @@ export interface FilterOptions {
   handlerUnit: HandlerUnit | '';
   category: TicketCategory | '';
   deadlineRange: string;
+  assignDate: string;
 }
 
 export interface FilterView {

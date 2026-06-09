@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { 
+import {
   AlertTriangle, 
   Clock, 
   RotateCcw, 
@@ -18,18 +18,26 @@ import { useTicketStore } from '@/store/useTicketStore';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useWorkday } from '@/hooks/useWorkday';
 import { clsx } from 'clsx';
+import { HANDLER_UNITS, HandlerUnit, ReturnRecord, RiskLevel, Ticket, UrgeRecord } from '@/types';
 
 type TabType = 'risk' | 'collaboration' | 'pendingUrge' | 'urge' | 'return';
+type RiskFilter = RiskLevel | '';
 
 const VALID_TABS: TabType[] = ['risk', 'collaboration', 'pendingUrge', 'urge', 'return'];
 
 export default function Supervision() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { getRiskTickets, getUrgeRecords, getReturnRecords, getSupervisorTodoTickets, tickets } = useTicketStore();
+  const { currentRole, currentUnit, tickets } = useTicketStore();
   const { getDeadlineLabel, getWorkdaysRemaining: getDaysRemaining } = useWorkday();
   
   const tabFromUrl = searchParams.get('tab') as TabType | null;
+  const unitFromUrl = searchParams.get('handlerUnit');
+  const riskLevelFromUrl = searchParams.get('riskLevel');
+  const selectedUnit = unitFromUrl && HANDLER_UNITS.includes(unitFromUrl as HandlerUnit) ? unitFromUrl as HandlerUnit : '';
+  const selectedRiskLevel: RiskFilter = ['high', 'medium', 'low'].includes(riskLevelFromUrl || '')
+    ? riskLevelFromUrl as RiskLevel
+    : '';
   const initialTab = tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : 'risk';
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
 
@@ -43,18 +51,59 @@ export default function Supervision() {
     setActiveTab(tab);
     navigate(`/supervision?tab=${tab}`, { replace: true });
   };
+
+  const isUnitRelated = (ticket: Ticket, unit: string) => {
+    return ticket.handlerUnit === unit || (ticket.collaborationRecords || []).some(record => record.unit === unit);
+  };
+
+  const getRiskLevel = (ticket: Ticket): RiskLevel => {
+    const remaining = getDaysRemaining(ticket.deadline);
+    if (remaining < 0 || ticket.status === 'overdue' || remaining <= 1) return 'high';
+    if (remaining <= 3) return 'medium';
+    return 'low';
+  };
+
+  const scopedTickets = tickets.filter(ticket => {
+    if (currentRole === 'handler' && currentUnit && !isUnitRelated(ticket, currentUnit)) {
+      return false;
+    }
+    if (selectedUnit && !isUnitRelated(ticket, selectedUnit)) {
+      return false;
+    }
+    return true;
+  });
+
+  const activeTickets = scopedTickets.filter(t => t.status !== 'completed' && t.status !== 'archived');
+  const riskTickets = {
+    high: activeTickets.filter(ticket => getRiskLevel(ticket) === 'high'),
+    medium: activeTickets.filter(ticket => getRiskLevel(ticket) === 'medium'),
+    low: activeTickets.filter(ticket => getRiskLevel(ticket) === 'low'),
+  };
+  const displayedRiskTickets = {
+    high: selectedRiskLevel && selectedRiskLevel !== 'high' ? [] : riskTickets.high,
+    medium: selectedRiskLevel && selectedRiskLevel !== 'medium' ? [] : riskTickets.medium,
+    low: selectedRiskLevel && selectedRiskLevel !== 'low' ? [] : riskTickets.low,
+  };
   
-  const riskTickets = getRiskTickets();
-  const pendingUrgeTickets = getSupervisorTodoTickets('pendingUrge');
-  const urgeRecords = getUrgeRecords();
-  const returnRecords = getReturnRecords();
-  const collaborationTickets = tickets.filter(t =>
+  const pendingUrgeTickets = activeTickets
+    .filter(t => {
+      const remaining = getDaysRemaining(t.deadline);
+      return remaining <= 3 && remaining >= 0 && t.urgeRecords.length === 0;
+    })
+    .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
+  const urgeRecords: UrgeRecord[] = scopedTickets.flatMap(t => t.urgeRecords).sort(
+    (a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime()
+  );
+  const returnRecords: ReturnRecord[] = scopedTickets.flatMap(t => t.returnRecords).sort(
+    (a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime()
+  );
+  const collaborationTickets = scopedTickets.filter(t =>
     t.status !== 'completed' &&
     t.status !== 'archived' &&
     (t.collaborationRecords || []).some(record => record.status !== 'completed')
   );
 
-  const getTicketById = (id: string) => tickets.find(t => t.id === id);
+  const getTicketById = (id: string) => scopedTickets.find(t => t.id === id);
   const getCollaborationSummary = (ticket: ReturnType<typeof getTicketById>) => {
     if (!ticket || !ticket.collaborationRecords?.length) return '';
     const pendingCount = ticket.collaborationRecords.filter(record => record.status !== 'completed').length;
@@ -62,7 +111,7 @@ export default function Supervision() {
   };
 
   const tabs = [
-    { key: 'risk' as TabType, label: '超期风险', icon: AlertTriangle, count: riskTickets.high.length + riskTickets.medium.length },
+    { key: 'risk' as TabType, label: '超期风险', icon: AlertTriangle, count: displayedRiskTickets.high.length + displayedRiskTickets.medium.length },
     { key: 'collaboration' as TabType, label: '协办中', icon: Users, count: collaborationTickets.length },
     { key: 'pendingUrge' as TabType, label: '待催办工单', icon: Bell, count: pendingUrgeTickets.length },
     { key: 'urge' as TabType, label: '催办记录', icon: Bell, count: urgeRecords.length },
@@ -99,7 +148,7 @@ export default function Supervision() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-red-600">高风险工单</p>
-              <p className="mt-2 text-3xl font-bold text-red-700">{riskTickets.high.length}</p>
+              <p className="mt-2 text-3xl font-bold text-red-700">{displayedRiskTickets.high.length}</p>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-100">
               <AlertOctagon className="h-6 w-6 text-red-600" />
@@ -114,7 +163,7 @@ export default function Supervision() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-orange-600">中风险工单</p>
-              <p className="mt-2 text-3xl font-bold text-orange-700">{riskTickets.medium.length}</p>
+              <p className="mt-2 text-3xl font-bold text-orange-700">{displayedRiskTickets.medium.length}</p>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-100">
               <AlertCircle className="h-6 w-6 text-orange-600" />
@@ -129,7 +178,7 @@ export default function Supervision() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-green-600">低风险工单</p>
-              <p className="mt-2 text-3xl font-bold text-green-700">{riskTickets.low.length}</p>
+              <p className="mt-2 text-3xl font-bold text-green-700">{displayedRiskTickets.low.length}</p>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-100">
               <Info className="h-6 w-6 text-green-600" />
@@ -184,9 +233,9 @@ export default function Supervision() {
               <div>
                 <h3 className="flex items-center space-x-2 text-sm font-semibold text-gray-900 mb-4">
                   <span className="flex h-2 w-2 rounded-full bg-red-500" />
-                  <span>高风险工单（{riskTickets.high.length}）</span>
+                  <span>高风险工单（{displayedRiskTickets.high.length}）</span>
                 </h3>
-                {riskTickets.high.length === 0 ? (
+                {displayedRiskTickets.high.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-gray-200 py-8 text-center">
                     <p className="text-sm text-gray-500">暂无高风险工单</p>
                   </div>
@@ -204,7 +253,7 @@ export default function Supervision() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-red-100">
-                        {riskTickets.high.map((ticket) => (
+                        {displayedRiskTickets.high.map((ticket) => (
                           <tr
                             key={ticket.id}
                             className="hover:bg-red-50/50 transition-colors cursor-pointer"
@@ -240,9 +289,9 @@ export default function Supervision() {
               <div>
                 <h3 className="flex items-center space-x-2 text-sm font-semibold text-gray-900 mb-4">
                   <span className="flex h-2 w-2 rounded-full bg-orange-500" />
-                  <span>中风险工单（{riskTickets.medium.length}）</span>
+                  <span>中风险工单（{displayedRiskTickets.medium.length}）</span>
                 </h3>
-                {riskTickets.medium.length === 0 ? (
+                {displayedRiskTickets.medium.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-gray-200 py-8 text-center">
                     <p className="text-sm text-gray-500">暂无中风险工单</p>
                   </div>
@@ -260,7 +309,7 @@ export default function Supervision() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-orange-100">
-                        {riskTickets.medium.map((ticket) => (
+                        {displayedRiskTickets.medium.map((ticket) => (
                           <tr
                             key={ticket.id}
                             className="hover:bg-orange-50/50 transition-colors cursor-pointer"
@@ -512,8 +561,12 @@ export default function Supervision() {
             各单位超期情况
           </h3>
           <div className="space-y-3">
-            {['城市管理委员会', '交通委员会', '住房和城乡建设委员会', '人力资源和社会保障局'].map((unit) => {
-              const unitTickets = tickets.filter(t => t.handlerUnit === unit && t.status !== 'completed');
+            {HANDLER_UNITS.filter(unit =>
+              scopedTickets.some(t => t.handlerUnit === unit) ||
+              selectedUnit === unit ||
+              (currentRole === 'handler' && currentUnit === unit)
+            ).map((unit) => {
+              const unitTickets = scopedTickets.filter(t => t.handlerUnit === unit && t.status !== 'completed');
               const overdueCount = unitTickets.filter(t => {
                 const days = getDaysRemaining(t.deadline);
                 return days < 0 || t.status === 'overdue';
@@ -550,7 +603,7 @@ export default function Supervision() {
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-lg bg-blue-50 p-4 text-center">
               <p className="text-2xl font-bold text-blue-700">
-                {tickets.filter(t => t.status === 'completed').length}
+                {scopedTickets.filter(t => t.status === 'completed').length}
               </p>
               <p className="text-xs text-blue-600 mt-1">已办结工单</p>
             </div>

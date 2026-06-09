@@ -7,9 +7,10 @@ interface LineChartProps {
   data: { date: string; count: number }[];
   height?: number;
   color?: string;
+  onItemClick?: (item: { date: string; count: number }) => void;
 }
 
-export function LineChart({ data, height = 200, color = '#3b82f6' }: LineChartProps) {
+export function LineChart({ data, height = 200, color = '#3b82f6', onItemClick }: LineChartProps) {
   const maxValue = useMemo(() => {
     const max = Math.max(...data.map(d => d.count), 1);
     return Math.ceil(max * 1.2);
@@ -106,14 +107,20 @@ export function LineChart({ data, height = 200, color = '#3b82f6' }: LineChartPr
         />
 
         {points.map((point, i) => (
-          <g key={i}>
-            <circle cx={point.x} cy={point.y} r="2" fill={color} />
+          <g
+            key={i}
+            onClick={() => onItemClick?.({ date: point.date, count: point.count })}
+            className={onItemClick ? 'cursor-pointer' : undefined}
+          >
+            <circle cx={point.x} cy={point.y} r="2" fill={color} className="transition-all hover:opacity-80" />
+            {onItemClick && <circle cx={point.x} cy={point.y} r="5" fill="transparent" />}
             <text
               x={point.x}
               y={height - CHART_PADDING.bottom + 12}
               textAnchor="middle"
               fontSize="3"
               fill="#6b7280"
+              className={onItemClick ? 'hover:fill-primary-600' : undefined}
             >
               {point.date}
             </text>

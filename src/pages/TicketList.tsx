@@ -1,18 +1,50 @@
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Clock, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles, Users } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { StatsCard } from '@/components/StatsCard';
 import { FilterBar } from '@/components/FilterBar';
 import { FilterViewSelector } from '@/components/FilterViewSelector';
 import { StatusBadge } from '@/components/StatusBadge';
-import { Ticket } from '@/types';
+import { AREAS, CATEGORIES, FilterOptions, HANDLER_UNITS, STATUS_LABELS, Ticket } from '@/types';
 import { useWorkday } from '@/hooks/useWorkday';
 import { clsx } from 'clsx';
 
 export default function TicketList() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { getFilteredTickets, getTicketStats, setFilterOptions, currentRole, currentUnit } = useTicketStore();
   const { getDeadlineLabel, getRiskLevel } = useWorkday();
+
+  const urlFilterOptions = useMemo(() => {
+    const status = searchParams.get('status');
+    const area = searchParams.get('area');
+    const handlerUnit = searchParams.get('handlerUnit');
+    const category = searchParams.get('category');
+    const deadlineRange = searchParams.get('deadlineRange');
+    const assignDate = searchParams.get('assignDate');
+    const fromDashboard = searchParams.get('fromDashboard') === '1';
+
+    const options: FilterOptions = {
+      status: status && status in STATUS_LABELS ? status as Ticket['status'] : '',
+      area: area && AREAS.includes(area as typeof AREAS[number]) ? area as typeof AREAS[number] : '',
+      handlerUnit: handlerUnit && HANDLER_UNITS.includes(handlerUnit as typeof HANDLER_UNITS[number])
+        ? handlerUnit as typeof HANDLER_UNITS[number]
+        : '',
+      category: category && CATEGORIES.includes(category as typeof CATEGORIES[number])
+        ? category as typeof CATEGORIES[number]
+        : '',
+      deadlineRange: ['overdue', 'today', '3days', '7days', '15days'].includes(deadlineRange || '') ? deadlineRange || '' : '',
+      assignDate: assignDate && /^\d{4}-\d{2}-\d{2}$/.test(assignDate) ? assignDate : '',
+    };
+
+    return { fromDashboard, options };
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!urlFilterOptions.fromDashboard) return;
+    setFilterOptions(urlFilterOptions.options);
+  }, [setFilterOptions, urlFilterOptions]);
   
   const tickets = getFilteredTickets();
   const stats = getTicketStats();

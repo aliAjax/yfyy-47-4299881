@@ -9,9 +9,10 @@ interface BarChartProps {
   height?: number;
   color?: string;
   horizontal?: boolean;
+  onItemClick?: (item: { label: string; value: number }) => void;
 }
 
-export function BarChart({ data, height = 220, color = '#3b82f6', horizontal = false }: BarChartProps) {
+export function BarChart({ data, height = 220, color = '#3b82f6', horizontal = false, onItemClick }: BarChartProps) {
   const maxValue = useMemo(() => {
     const max = Math.max(...data.map(d => d.value), 1);
     return Math.ceil(max * 1.2);
@@ -40,7 +41,14 @@ export function BarChart({ data, height = 220, color = '#3b82f6', horizontal = f
         {data.map((item, index) => {
           const percentage = (item.value / maxValue) * 100;
           return (
-            <div key={index} className="flex items-center gap-3">
+            <div
+              key={index}
+              onClick={() => onItemClick?.(item)}
+              className={clsx(
+                'flex items-center gap-3 rounded-md transition-colors',
+                onItemClick && item.value > 0 && 'cursor-pointer hover:bg-gray-50'
+              )}
+            >
               <div className="w-24 flex-shrink-0 text-xs text-gray-600 truncate text-right">
                 {item.label}
               </div>
@@ -95,7 +103,11 @@ export function BarChart({ data, height = 220, color = '#3b82f6', horizontal = f
           const barHeight = (item.value / maxValue) * chartHeight;
           const y = CHART_PADDING.top + chartHeight - barHeight;
           return (
-            <g key={i}>
+            <g
+              key={i}
+              onClick={() => onItemClick?.(item)}
+              className={onItemClick && item.value > 0 ? 'cursor-pointer' : undefined}
+            >
               <rect
                 x={x}
                 y={y}
@@ -103,7 +115,7 @@ export function BarChart({ data, height = 220, color = '#3b82f6', horizontal = f
                 height={barHeight}
                 fill={color}
                 rx="1"
-                className="transition-all duration-500"
+                className="transition-all duration-500 hover:opacity-80"
               />
               <text
                 x={x + barWidth / 2}
@@ -139,16 +151,23 @@ interface RankItemProps {
   subValue?: string;
   maxValue: number;
   color?: string;
+  onClick?: () => void;
 }
 
-export function RankItem({ rank, label, value, subValue, maxValue, color = '#ef4444' }: RankItemProps) {
+export function RankItem({ rank, label, value, subValue, maxValue, color = '#ef4444', onClick }: RankItemProps) {
   const percentage = (value / maxValue) * 100;
   
   const rankColors = ['#ef4444', '#f97316', '#eab308', '#3b82f6', '#6b7280'];
   const rankBgColors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-blue-500', 'bg-gray-400'];
 
   return (
-    <div className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
+    <div
+      onClick={onClick}
+      className={clsx(
+        'flex items-center gap-3 py-2 border-b border-gray-100 last:border-0 rounded-md transition-colors',
+        onClick && 'cursor-pointer hover:bg-gray-50'
+      )}
+    >
       <div className={clsx(
         'w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold text-white flex-shrink-0',
         rank <= 3 ? rankBgColors[rank - 1] : 'bg-gray-300'

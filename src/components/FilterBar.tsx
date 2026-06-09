@@ -26,7 +26,7 @@ export function FilterBar() {
         )}
       </div>
       
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {/* 状态 */}
         <div>
           <label className="mb-1.5 block text-xs font-medium text-gray-600">工单状态</label>
@@ -106,6 +106,17 @@ export function FilterBar() {
             <option value="7days">7天内到期</option>
             <option value="15days">15天内到期</option>
           </select>
+        </div>
+
+        {/* 交办日期 */}
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-gray-600">交办日期</label>
+          <input
+            type="date"
+            value={filterOptions.assignDate || ''}
+            onChange={(e) => setFilterOptions({ assignDate: e.target.value })}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-all"
+          />
         </div>
       </div>
     </div>
