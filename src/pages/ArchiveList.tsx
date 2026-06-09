@@ -22,13 +22,7 @@ export default function ArchiveList() {
 
   const tickets = getArchivedTickets();
   const stats = getArchiveStats();
-  const groupStats = useMemo(() => getArchiveGroupStats(), [
-    archiveFilterOptions.handlerUnit,
-    archiveFilterOptions.category,
-    archiveFilterOptions.satisfaction,
-    archiveFilterOptions.archiveTimeRange,
-    archiveFilterOptions.hasCoOrganizer,
-  ]);
+  const groupStats = getArchiveGroupStats();
 
   const totalCount = tickets.length;
 
