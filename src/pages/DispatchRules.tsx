@@ -21,12 +21,17 @@ import {
   RotateCcw,
   Filter,
   FileText,
-  BarChart3
+  BarChart3,
+  Calculator,
+  Sparkles,
+  FileQuestion,
+  CheckCircle2,
+  RefreshCw
 } from 'lucide-react';
 import { useDispatchRuleStore } from '@/store/useDispatchRuleStore';
 import { useTicketStore } from '@/store/useTicketStore';
 import { CATEGORIES, AREAS, HANDLER_UNITS, TicketCategory, Area, HandlerUnit } from '@/types';
-import { checkRuleConflict } from '@/utils/dispatchRule';
+import { checkRuleConflict, getDispatchRecommendation, getMatchReasonText, matchRules } from '@/utils/dispatchRule';
 import { clsx } from 'clsx';
 
 interface RuleFormData {
@@ -53,9 +58,23 @@ const initialFormData: RuleFormData = {
   description: '',
 };
 
+interface TrialFormData {
+  title: string;
+  content: string;
+  category: TicketCategory | '';
+  area: Area | '';
+}
+
+const initialTrialData: TrialFormData = {
+  title: '',
+  content: '',
+  category: '',
+  area: '',
+};
+
 export default function DispatchRules() {
   const navigate = useNavigate();
-  const { rules, addRule, updateRule, deleteRule, toggleRule, resetRules } = useDispatchRuleStore();
+  const { rules, addRule, updateRule, deleteRule, toggleRule, resetRules, getEnabledRules } = useDispatchRuleStore();
   const { getTicketCountByRule, getTicketsByRule } = useTicketStore();
 
   const [searchText, setSearchText] = useState('');
@@ -67,6 +86,10 @@ export default function DispatchRules() {
   const [formData, setFormData] = useState<RuleFormData>(initialFormData);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [conflictRules, setConflictRules] = useState<typeof rules>([]);
+
+  const [showTrialPanel, setShowTrialPanel] = useState(false);
+  const [trialData, setTrialData] = useState<TrialFormData>(initialTrialData);
+  const [hasTrialRun, setHasTrialRun] = useState(false);
 
   const filteredRules = useMemo(() => {
     return rules.filter(rule => {
@@ -222,6 +245,58 @@ export default function DispatchRules() {
     };
   }, [rules, getTicketCountByRule]);
 
+  const enabledRules = useMemo(() => getEnabledRules(), [getEnabledRules]);
+
+  const trialResult = useMemo(() => {
+    if (!hasTrialRun) return null;
+    const hasInput = trialData.title.trim() || trialData.content.trim() || trialData.category || trialData.area;
+    if (!hasInput) return null;
+
+    const allMatched = matchRules(enabledRules, {
+      title: trialData.title,
+      content: trialData.content,
+      category: trialData.category,
+      area: trialData.area,
+    });
+
+    const recommendation = getDispatchRecommendation(enabledRules, {
+      title: trialData.title,
+      content: trialData.content,
+      category: trialData.category,
+      area: trialData.area,
+    });
+
+    return {
+      allMatched,
+      recommendation,
+    };
+  }, [trialData, enabledRules, hasTrialRun]);
+
+  const handleTrialChange = (field: keyof TrialFormData, value: string) => {
+    setTrialData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleTrialRun = () => {
+    setHasTrialRun(true);
+  };
+
+  const handleTrialReset = () => {
+    setTrialData(initialTrialData);
+    setHasTrialRun(false);
+  };
+
+  const getScoreColor = (score: number) => {
+    if (score >= 60) return 'text-green-600';
+    if (score >= 30) return 'text-amber-600';
+    return 'text-gray-500';
+  };
+
+  const getScoreBadgeClass = (score: number) => {
+    if (score >= 60) return 'bg-green-100 text-green-700';
+    if (score >= 30) return 'bg-amber-100 text-amber-700';
+    return 'bg-gray-100 text-gray-600';
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -236,6 +311,18 @@ export default function DispatchRules() {
           </div>
         </div>
         <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setShowTrialPanel(!showTrialPanel)}
+            className={clsx(
+              'inline-flex items-center space-x-1.5 rounded-lg border px-4 py-2 text-sm transition-colors',
+              showTrialPanel
+                ? 'border-primary-500 bg-primary-50 text-primary-700'
+                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+            )}
+          >
+            <Calculator className="h-4 w-4" />
+            <span>规则试算</span>
+          </button>
           <button
             onClick={() => {
               if (confirm('确定要重置所有规则为默认值吗？')) {
@@ -304,6 +391,279 @@ export default function DispatchRules() {
           </div>
         </div>
       </div>
+
+      {/* Trial Panel */}
+      {showTrialPanel && (
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-blue-50 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600">
+                  <Calculator className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">规则试算</h2>
+                  <p className="text-sm text-gray-500">输入诉求信息，预览规则匹配结果，不创建工单</p>
+                </div>
+              </div>
+              <span className="inline-flex items-center space-x-1 text-xs text-gray-500 bg-white px-2.5 py-1 rounded-full border border-gray-200">
+                <Sparkles className="h-3 w-3 text-indigo-500" />
+                <span>基于 {enabledRules.length} 条启用规则</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
+            {/* Left: Input Form */}
+            <div className="p-6 lg:border-r border-gray-100 space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <FileText className="inline h-4 w-4 mr-1 text-gray-400" />
+                  诉求标题
+                </label>
+                <input
+                  type="text"
+                  value={trialData.title}
+                  onChange={(e) => handleTrialChange('title', e.target.value)}
+                  placeholder="请简要描述诉求内容，如：东城区路灯不亮"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    <Tag className="inline h-4 w-4 mr-1 text-gray-400" />
+                    诉求类型
+                  </label>
+                  <select
+                    value={trialData.category}
+                    onChange={(e) => handleTrialChange('category', e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  >
+                    <option value="">不限</option>
+                    {CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    <MapPin className="inline h-4 w-4 mr-1 text-gray-400" />
+                    所属区域
+                  </label>
+                  <select
+                    value={trialData.area}
+                    onChange={(e) => handleTrialChange('area', e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  >
+                    <option value="">不限</option>
+                    {AREAS.map(area => (
+                      <option key={area} value={area}>{area}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <FileQuestion className="inline h-4 w-4 mr-1 text-gray-400" />
+                  诉求内容
+                </label>
+                <textarea
+                  value={trialData.content}
+                  onChange={(e) => handleTrialChange('content', e.target.value)}
+                  placeholder="请详细描述诉求内容，如：XX路XX号门口的路灯已经3天不亮了，晚上行人通行很不安全"
+                  rows={5}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-all resize-none"
+                />
+                <p className="mt-1 text-xs text-gray-400 text-right">
+                  {trialData.content.length} 字
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-3 pt-2">
+                <button
+                  onClick={handleTrialRun}
+                  className="inline-flex items-center space-x-2 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:from-indigo-700 hover:to-blue-700 transition-all shadow-sm"
+                >
+                  <Calculator className="h-4 w-4" />
+                  <span>开始试算</span>
+                </button>
+                <button
+                  onClick={handleTrialReset}
+                  className="inline-flex items-center space-x-2 rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  <span>清空</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Right: Results */}
+            <div className="p-6 bg-gray-50/50">
+              {!hasTrialRun || !trialResult ? (
+                <div className="h-full flex flex-col items-center justify-center text-center py-12">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 mb-4">
+                    <Calculator className="h-8 w-8 text-indigo-400" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-700">准备就绪</p>
+                  <p className="text-xs text-gray-500 mt-1 max-w-xs">
+                    在左侧填写诉求标题、内容、类型和区域后，点击「开始试算」查看匹配结果
+                  </p>
+                </div>
+              ) : trialResult.allMatched.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center py-12">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 mb-4">
+                    <AlertTriangle className="h-8 w-8 text-gray-400" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-700">未匹配到任何规则</p>
+                  <p className="text-xs text-gray-500 mt-1 max-w-xs">
+                    当前启用的规则均未命中，建议检查关键词或调整规则配置
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Recommendation Summary */}
+                  <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+                    <div className="px-4 py-3 bg-gradient-to-r from-green-50 to-emerald-50 border-b border-gray-100">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <Sparkles className="h-4 w-4 text-green-600" />
+                          <span className="text-sm font-semibold text-gray-900">推荐结果</span>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          命中 {trialResult.allMatched.length} 条规则
+                        </span>
+                      </div>
+                    </div>
+                    <div className="p-4 space-y-3">
+                      {trialResult.recommendation?.hasConflict && (
+                        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                          <div className="flex items-start space-x-2">
+                            <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-xs font-medium text-amber-800">冲突提示</p>
+                              <p className="text-xs text-amber-700 mt-1">
+                                {trialResult.recommendation.conflictReason}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="rounded-lg bg-gray-50 p-3">
+                          <p className="text-xs text-gray-500 mb-1">推荐承办单位</p>
+                          <div className="flex items-center space-x-1.5">
+                            <Building2 className="h-4 w-4 text-primary-600" />
+                            <p className="text-sm font-semibold text-gray-900">
+                              {trialResult.recommendation?.handlerUnit || '—'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="rounded-lg bg-gray-50 p-3">
+                          <p className="text-xs text-gray-500 mb-1">推荐办理期限</p>
+                          <div className="flex items-center space-x-1.5">
+                            <Clock className="h-4 w-4 text-primary-600" />
+                            <p className="text-sm font-semibold text-gray-900">
+                              {trialResult.recommendation?.deadlineDays
+                                ? `${trialResult.recommendation.deadlineDays} 天`
+                                : '—'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Matched Rules List */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-sm font-medium text-gray-700">命中规则（按匹配度排序）</p>
+                    </div>
+                    <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                      {trialResult.allMatched.map((match, index) => (
+                        <div
+                          key={match.rule.id}
+                          className={clsx(
+                            'rounded-lg border p-4 transition-all',
+                            index === 0
+                              ? 'border-primary-200 bg-white shadow-sm'
+                              : 'border-gray-200 bg-white'
+                          )}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center space-x-2 min-w-0">
+                              {index === 0 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-700 flex-shrink-0">
+                                  <CheckCircle2 className="h-3 w-3 mr-0.5" />
+                                  首选
+                                </span>
+                              )}
+                              <h4 className={clsx(
+                                'text-sm font-medium truncate',
+                                index === 0 ? 'text-primary-700' : 'text-gray-800'
+                              )}>
+                                {match.rule.name}
+                              </h4>
+                            </div>
+                            <span className={clsx(
+                              'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0 ml-2',
+                              getScoreBadgeClass(match.score)
+                            )}>
+                              {match.score} 分
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                            {match.rule.category && (
+                              <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-blue-50 text-xs text-blue-700">
+                                <Tag className="h-3 w-3" />
+                                <span>{match.rule.category}</span>
+                              </span>
+                            )}
+                            {match.rule.area && (
+                              <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-purple-50 text-xs text-purple-700">
+                                <MapPin className="h-3 w-3" />
+                                <span>{match.rule.area}</span>
+                              </span>
+                            )}
+                            {match.rule.keywords.length > 0 && (
+                              <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-xs text-amber-700">
+                                <Zap className="h-3 w-3" />
+                                <span>{match.rule.keywords.join('、')}</span>
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <p className="text-xs text-gray-600">
+                              <span className="font-medium text-gray-700">匹配理由：</span>
+                              {getMatchReasonText(match) || '部分条件匹配'}
+                            </p>
+                            <div className="flex items-center justify-between text-xs text-gray-500">
+                              <span className="inline-flex items-center space-x-1">
+                                <Building2 className="h-3 w-3" />
+                                <span>承办：{match.rule.handlerUnit}</span>
+                              </span>
+                              <span className="inline-flex items-center space-x-1">
+                                <Clock className="h-3 w-3" />
+                                <span>期限：{match.rule.deadlineDays} 天</span>
+                              </span>
+                              <span>优先级：{match.rule.priority}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
