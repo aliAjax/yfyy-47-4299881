@@ -20,7 +20,8 @@ import {
   Info,
   Clock,
   Lightbulb,
-  ChevronDown
+  ChevronDown,
+  TrendingUp
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { useContactStore } from '@/store/useContactStore';
@@ -832,9 +833,18 @@ export default function NewTicket() {
                               {match.entry.recommendedUnit}
                             </span>
                             {match.entry.useCount > 0 && (
-                              <span className="text-xs text-gray-400 flex items-center space-x-0.5">
-                                <span>•</span>
+                              <span className={clsx(
+                                'text-xs flex items-center space-x-0.5 font-medium',
+                                match.entry.useCount > 100 ? 'text-green-600' :
+                                match.entry.useCount > 50 ? 'text-amber-600' : 'text-gray-500'
+                              )}>
+                                <TrendingUp className="h-3 w-3" />
                                 <span>{match.entry.useCount} 次使用</span>
+                              </span>
+                            )}
+                            {match.entry.lastUsedTime && (
+                              <span className="text-xs text-gray-400">
+                                • 最近 {match.entry.lastUsedTime.split(' ')[0]}
                               </span>
                             )}
                           </div>

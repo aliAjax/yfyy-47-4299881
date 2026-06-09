@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
   FileText, 
@@ -49,7 +49,22 @@ export function Layout() {
   const notifications = useNotificationStore((state) => state.notifications);
   const checkOverdueSoon = useNotificationStore((state) => state.checkOverdueSoon);
   
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const unreadCount = useMemo(() => {
+    return notifications.filter(n => {
+      if (n.isRead) return false;
+      const audience = n.audience as string | undefined;
+      if (!audience || audience === 'all') return true;
+      if (currentRole === 'supervisor') {
+        return audience === 'supervisor' || audience === 'all';
+      }
+      if (currentRole === 'handler' && currentUnit) {
+        if (audience === 'handler_unit' && n.targetUnit === currentUnit) return true;
+        if (audience === 'coorg_unit' && n.targetUnit === currentUnit) return true;
+        return false;
+      }
+      return true;
+    }).length;
+  }, [notifications, currentRole, currentUnit]);
 
   useEffect(() => {
     checkOverdueSoon();

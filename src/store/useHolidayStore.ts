@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { HolidayConfig, HolidayType } from '@/types';
+import { HolidayConfig, HolidayType, HolidayChangeRecord } from '@/types';
 import { mockHolidays } from '@/data/mockData';
 import { generateId, formatDateTime } from '@/utils/date';
 
 interface HolidayState {
   holidays: HolidayConfig[];
+  changeHistory: HolidayChangeRecord[];
   
   getHolidays: () => HolidayConfig[];
   getHolidaysByYear: (year: number) => HolidayConfig[];
@@ -19,6 +20,9 @@ interface HolidayState {
   batchAddHolidays: (holidays: Omit<HolidayConfig, 'id' | 'createTime' | 'updateTime'>[]) => number;
   
   resetHolidays: () => void;
+  
+  addChangeRecord: (record: Omit<HolidayChangeRecord, 'id' | 'createTime'>) => void;
+  getChangeHistory: () => HolidayChangeRecord[];
 }
 
 function validateHoliday(holiday: Partial<HolidayConfig>): string[] {
@@ -39,6 +43,7 @@ export const useHolidayStore = create<HolidayState>()(
   persist(
     (set, get) => ({
       holidays: mockHolidays,
+      changeHistory: [],
 
       getHolidays: () => {
         return [...get().holidays].sort((a, b) => a.date.localeCompare(b.date));
@@ -151,6 +156,21 @@ export const useHolidayStore = create<HolidayState>()(
 
       resetHolidays: () => {
         set({ holidays: mockHolidays });
+      },
+
+      addChangeRecord: (record) => {
+        const newRecord: HolidayChangeRecord = {
+          ...record,
+          id: generateId(),
+          createTime: formatDateTime(new Date()),
+        };
+        set((state) => ({
+          changeHistory: [newRecord, ...state.changeHistory].slice(0, 100),
+        }));
+      },
+
+      getChangeHistory: () => {
+        return [...get().changeHistory];
       },
     }),
     {

@@ -24,7 +24,7 @@ import { useKnowledgeStore } from '@/store/useKnowledgeStore';
 import { CATEGORIES, HANDLER_UNITS, TicketCategory, HandlerUnit, KnowledgeEntry } from '@/types';
 import { clsx } from 'clsx';
 
-type KnowledgeSortBy = 'updateTime' | 'useCount' | 'createTime';
+type KnowledgeSortBy = 'updateTime' | 'useCount' | 'createTime' | 'lastUsedTime';
 
 interface KnowledgeFormData {
   title: string;
@@ -382,13 +382,25 @@ export default function KnowledgeBase() {
                   <span className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-700 text-xs font-bold">
                     {index + 1}
                   </span>
-                  <span className="text-xs font-medium text-amber-600">
-                    {formatNumber(entry.useCount)} 次
+                  <span className={clsx(
+                    'text-xs font-medium',
+                    entry.useCount > 100 ? 'text-green-600' :
+                    entry.useCount > 50 ? 'text-amber-600' : 'text-gray-600'
+                  )}>
+                    <span className="flex items-center space-x-0.5">
+                      <TrendingUp className="h-3 w-3" />
+                      <span>{formatNumber(entry.useCount)} 次</span>
+                    </span>
                   </span>
                 </div>
-                <p className="text-sm font-medium text-gray-800 line-clamp-2">
+                <p className="text-sm font-medium text-gray-800 line-clamp-2 mb-1">
                   {entry.title}
                 </p>
+                {entry.lastUsedTime && (
+                  <p className="text-xs text-gray-400">
+                    最近使用：{entry.lastUsedTime.split(' ')[0]}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -451,6 +463,7 @@ export default function KnowledgeBase() {
             >
               <option value="updateTime">最近更新</option>
               <option value="useCount">使用频率</option>
+              <option value="lastUsedTime">最近使用</option>
               <option value="createTime">创建时间</option>
             </select>
           </div>
@@ -528,9 +541,12 @@ export default function KnowledgeBase() {
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                   <div className="flex items-center space-x-1">
-                  <TrendingUp className="h-3 w-3" />
-                  <span>使用次数</span>
-                </div>
+                    <TrendingUp className="h-3 w-3" />
+                    <span>使用次数</span>
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  最近使用
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                   更新时间
@@ -543,7 +559,7 @@ export default function KnowledgeBase() {
             <tbody className="divide-y divide-gray-100">
               {filteredEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
+                  <td colSpan={10} className="px-4 py-12 text-center text-gray-500">
                     <BookOpen className="mx-auto h-10 w-10 text-gray-300 mb-2" />
                     <p>暂无知识条目</p>
                   </td>
@@ -613,6 +629,11 @@ export default function KnowledgeBase() {
                         entry.useCount > 50 ? 'text-amber-600' : 'text-gray-500'
                       )}>
                         {formatNumber(entry.useCount)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm text-gray-500">
+                        {entry.lastUsedTime || '—'}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -952,9 +973,18 @@ export default function KnowledgeBase() {
                   )}>
                     {viewingEntry.enabled ? '启用' : '停用'}
                   </span>
-                  <span className="inline-flex items-center space-x-1 text-xs text-gray-500">
-                    <TrendingUp className="h-3 w-3" />
-                    <span>使用 {viewingEntry.useCount} 次</span>
+                  <span className="inline-flex items-center space-x-1 text-xs font-medium">
+                    <TrendingUp className={clsx(
+                      'h-3 w-3',
+                      viewingEntry.useCount > 100 ? 'text-green-600' :
+                      viewingEntry.useCount > 50 ? 'text-amber-600' : 'text-gray-500'
+                    )} />
+                    <span className={clsx(
+                      viewingEntry.useCount > 100 ? 'text-green-600' :
+                      viewingEntry.useCount > 50 ? 'text-amber-600' : 'text-gray-500'
+                    )}>
+                      使用 {formatNumber(viewingEntry.useCount)} 次
+                    </span>
                   </span>
                 </div>
               </div>

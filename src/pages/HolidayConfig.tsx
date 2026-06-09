@@ -11,11 +11,33 @@ import {
   Filter,
   CalendarClock,
   Sun,
-  Briefcase
+  Briefcase,
+  AlertTriangle,
+  TrendingDown,
+  TrendingUp,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  ShieldAlert,
+  Shield,
+  ShieldCheck,
+  History,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { useHolidayStore } from '@/store/useHolidayStore';
-import type { HolidayType } from '@/types';
+import { useTicketStore } from '@/store/useTicketStore';
+import { useNotificationStore } from '@/store/useNotificationStore';
+import type { HolidayType, RiskLevel, ImpactSeverity, HolidayChangeType } from '@/types';
+import { calculateHolidayImpactPreview, type HolidayImpactPreview } from '@/utils/workday';
 import { clsx } from 'clsx';
+
+type PendingAction =
+  | { type: 'add'; data: Omit<import('@/types').HolidayConfig, 'id' | 'createTime' | 'updateTime'> }
+  | { type: 'update'; id: string; data: Partial<import('@/types').HolidayConfig> }
+  | { type: 'delete'; id: string }
+  | { type: 'reset' };
 
 interface HolidayFormData {
   date: string;
@@ -30,7 +52,9 @@ const initialFormData: HolidayFormData = {
 };
 
 export default function HolidayConfig() {
-  const { holidays, addHoliday, updateHoliday, deleteHoliday, resetHolidays } = useHolidayStore();
+  const { holidays, addHoliday, updateHoliday, deleteHoliday, resetHolidays, getHolidayDatesByType, addChangeRecord } = useHolidayStore();
+  const { tickets } = useTicketStore();
+  const { refreshOverdueNotifications } = useNotificationStore();
 
   const [searchText, setSearchText] = useState('');
   const [filterType, setFilterType] = useState<HolidayType | ''>('');
@@ -39,6 +63,11 @@ export default function HolidayConfig() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<HolidayFormData>(initialFormData);
   const [formErrors, setFormErrors] = useState<string[]>([]);
+  const [showImpactPreview, setShowImpactPreview] = useState(false);
+  const [impactPreview, setImpactPreview] = useState<HolidayImpactPreview | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [strongConfirmChecked, setStrongConfirmChecked] = useState(false);
+  const [historicalTabActive, setHistoricalTabActive] = useState(false);
 
   const years = useMemo(() => {
     const yearSet = new Set(holidays.map(h => h.year));
@@ -96,41 +125,221 @@ export default function HolidayConfig() {
     }
   };
 
+  const simulateNewHolidayDates = (action: PendingAction): { holidayDates: string[]; workdayDates: string[] } => {
+    let simulatedHolidays = [...holidays];
+
+    switch (action.type) {
+      case 'add':
+        simulatedHolidays = [
+          {
+            ...action.data,
+            id: 'temp',
+            createTime: '',
+            updateTime: '',
+          } as import('@/types').HolidayConfig,
+          ...simulatedHolidays,
+        ];
+        break;
+      case 'update':
+        simulatedHolidays = simulatedHolidays.map(h =>
+          h.id === action.id ? { ...h, ...action.data } : h
+        );
+        break;
+      case 'delete':
+        simulatedHolidays = simulatedHolidays.filter(h => h.id !== action.id);
+        break;
+      case 'reset':
+        simulatedHolidays = [];
+        break;
+    }
+
+    return {
+      holidayDates: simulatedHolidays.filter(h => h.type === 'holiday').map(h => h.date),
+      workdayDates: simulatedHolidays.filter(h => h.type === 'workday').map(h => h.date),
+    };
+  };
+
+  const getSeverityBadge = (severity: ImpactSeverity) => {
+    const map: Record<ImpactSeverity, { label: string; bg: string; text: string; border: string; icon: typeof Shield }> = {
+      low: { label: '低影响', bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: ShieldCheck },
+      medium: { label: '中等影响', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: ShieldAlert },
+      high: { label: '高影响', bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', icon: AlertTriangle },
+      critical: { label: '严重影响', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: AlertCircle },
+    };
+    return map[severity];
+  };
+
+  const getChangeDescription = (action: PendingAction): string => {
+    switch (action.type) {
+      case 'add': return `添加节假日：${action.data.name} (${action.data.date})`;
+      case 'update': return `更新节假日配置 (${action.id})`;
+      case 'delete': return `删除节假日配置 (${action.id})`;
+      case 'reset': return '重置为默认节假日配置';
+    }
+  };
+
+  const showImpactPreviewForAction = (action: PendingAction) => {
+    const oldHolidayDates = getHolidayDatesByType('holiday');
+    const oldWorkdayDates = getHolidayDatesByType('workday');
+    const { holidayDates: newHolidayDates, workdayDates: newWorkdayDates } = simulateNewHolidayDates(action);
+
+    const preview = calculateHolidayImpactPreview(
+      tickets,
+      oldHolidayDates,
+      oldWorkdayDates,
+      newHolidayDates,
+      newWorkdayDates
+    );
+
+    setPendingAction(action);
+    setImpactPreview(preview);
+    setStrongConfirmChecked(false);
+    setHistoricalTabActive(false);
+    setShowImpactPreview(true);
+  };
+
+  const executePendingAction = () => {
+    if (!pendingAction || !impactPreview) return;
+
+    if (impactPreview.requiresStrongConfirmation && !strongConfirmChecked) {
+      return;
+    }
+
+    const oldHolidayDates = getHolidayDatesByType('holiday');
+    const oldWorkdayDates = getHolidayDatesByType('workday');
+
+    switch (pendingAction.type) {
+      case 'add':
+        addHoliday(pendingAction.data);
+        break;
+      case 'update':
+        updateHoliday(pendingAction.id, pendingAction.data);
+        break;
+      case 'delete':
+        deleteHoliday(pendingAction.id);
+        break;
+      case 'reset':
+        resetHolidays();
+        break;
+    }
+
+    const { invalidated, created } = refreshOverdueNotifications();
+
+    const newHolidayDates = getHolidayDatesByType('holiday');
+    const newWorkdayDates = getHolidayDatesByType('workday');
+
+    addChangeRecord({
+      changeType: pendingAction.type as HolidayChangeType,
+      changeDescription: getChangeDescription(pendingAction),
+      oldHolidayDates,
+      oldWorkdayDates,
+      newHolidayDates,
+      newWorkdayDates,
+      affectedOpenTickets: impactPreview.totalAffected,
+      affectedHistoricalTickets: impactPreview.historicalAffected,
+      newlyOverdue: impactPreview.newlyOverdue,
+      noLongerOverdue: impactPreview.noLongerOverdue,
+      riskElevated: impactPreview.riskElevated,
+      riskReduced: impactPreview.riskReduced,
+      notificationsCreated: created,
+      notificationsInvalidated: invalidated,
+      operator: '李督办',
+    });
+
+    setShowImpactPreview(false);
+    setImpactPreview(null);
+    setPendingAction(null);
+    setStrongConfirmChecked(false);
+    setHistoricalTabActive(false);
+    setShowModal(false);
+    setEditingId(null);
+    setFormData(initialFormData);
+    setFormErrors([]);
+  };
+
+  const cancelImpactPreview = () => {
+    setShowImpactPreview(false);
+    setImpactPreview(null);
+    setPendingAction(null);
+    setStrongConfirmChecked(false);
+    setHistoricalTabActive(false);
+  };
+
   const handleSubmit = () => {
     const year = formData.date ? parseInt(formData.date.split('-')[0]) : new Date().getFullYear();
 
     if (editingId) {
-      const result = updateHoliday(editingId, {
-        ...formData,
-        year,
-      });
-      if (!result.success) {
-        setFormErrors(result.errors);
+      const existingHoliday = useHolidayStore.getState().holidays.find(h => h.id === editingId);
+      const updatedHoliday = { ...existingHoliday, ...formData, year };
+      const errors: string[] = [];
+      if (!updatedHoliday.date) errors.push('请选择日期');
+      if (!updatedHoliday.name?.trim()) errors.push('请输入节假日名称');
+      if (!updatedHoliday.type) errors.push('请选择类型');
+      if (errors.length > 0) {
+        setFormErrors(errors);
         return;
       }
+      if (formData.date && formData.date !== existingHoliday?.date) {
+        const duplicate = useHolidayStore.getState().holidays.find(h => h.date === formData.date && h.id !== editingId);
+        if (duplicate) {
+          setFormErrors(['该日期已存在配置']);
+          return;
+        }
+      }
+      showImpactPreviewForAction({
+        type: 'update',
+        id: editingId,
+        data: { ...formData, year },
+      });
     } else {
-      const result = addHoliday({
-        ...formData,
-        year,
-      });
-      if (!result.success) {
-        setFormErrors(result.errors);
+      const errors: string[] = [];
+      if (!formData.date) errors.push('请选择日期');
+      if (!formData.name?.trim()) errors.push('请输入节假日名称');
+      if (!formData.type) errors.push('请选择类型');
+      if (errors.length > 0) {
+        setFormErrors(errors);
         return;
       }
+      const existing = useHolidayStore.getState().getHolidayByDate(formData.date);
+      if (existing) {
+        setFormErrors(['该日期已存在配置']);
+        return;
+      }
+      showImpactPreviewForAction({
+        type: 'add',
+        data: { ...formData, year },
+      });
     }
-    handleClose();
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('确定要删除这条节假日配置吗？')) {
-      deleteHoliday(id);
-    }
+    showImpactPreviewForAction({ type: 'delete', id });
   };
 
   const handleReset = () => {
-    if (confirm('确定要重置为默认节假日配置吗？所有自定义配置将丢失。')) {
-      resetHolidays();
+    showImpactPreviewForAction({ type: 'reset' });
+  };
+
+  const getRiskLabel = (level: RiskLevel) => {
+    switch (level) {
+      case 'high': return '高风险';
+      case 'medium': return '中风险';
+      case 'low': return '低风险';
     }
+  };
+
+  const getRiskBadgeClass = (level: RiskLevel) => {
+    switch (level) {
+      case 'high': return 'bg-red-100 text-red-700';
+      case 'medium': return 'bg-amber-100 text-amber-700';
+      case 'low': return 'bg-green-100 text-green-700';
+    }
+  };
+
+  const formatWorkdaysChange = (change: number) => {
+    if (change > 0) return `+${change}个工作日`;
+    if (change < 0) return `${change}个工作日`;
+    return '无变化';
   };
 
   const getTypeLabel = (type: HolidayType) => {
@@ -432,6 +641,484 @@ export default function HolidayConfig() {
                 <Save className="h-4 w-4" />
                 <span>保存</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Impact Preview Modal */}
+      {showImpactPreview && impactPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-4xl max-h-[90vh] rounded-xl bg-white shadow-xl flex flex-col">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center space-x-3">
+                <div className={clsx(
+                  'flex h-10 w-10 items-center justify-center rounded-lg',
+                  getSeverityBadge(impactPreview.severity).bg,
+                  getSeverityBadge(impactPreview.severity).border,
+                  'border'
+                )}>
+                  {(() => {
+                    const Icon = getSeverityBadge(impactPreview.severity).icon;
+                    return <Icon className={clsx('h-5 w-5', getSeverityBadge(impactPreview.severity).text)} />;
+                  })()}
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-lg font-semibold text-gray-900">节假日配置变更影响预览</h3>
+                    <span className={clsx(
+                      'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border',
+                      getSeverityBadge(impactPreview.severity).bg,
+                      getSeverityBadge(impactPreview.severity).text,
+                      getSeverityBadge(impactPreview.severity).border
+                    )}>
+                      {getSeverityBadge(impactPreview.severity).label}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    {pendingAction?.type === 'add' && '即将添加节假日配置'}
+                    {pendingAction?.type === 'update' && '即将更新节假日配置'}
+                    {pendingAction?.type === 'delete' && '即将删除节假日配置'}
+                    {pendingAction?.type === 'reset' && '即将重置为默认节假日配置'}
+                    {impactPreview.historicalAffected > 0 && ` · 同时影响 ${impactPreview.historicalAffected} 个历史工单`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={cancelImpactPreview}
+                className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {impactPreview.requiresStrongConfirmation && impactPreview.strongConfirmationReason && (
+                <div className="rounded-xl border border-red-300 bg-red-50 p-4">
+                  <div className="flex items-start space-x-3">
+                    <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-red-800">{impactPreview.strongConfirmationReason}</p>
+                      <label className="mt-3 flex items-start space-x-2 cursor-pointer">
+                        <button
+                          type="button"
+                          onClick={() => setStrongConfirmChecked(!strongConfirmChecked)}
+                          className="mt-0.5 flex-shrink-0"
+                        >
+                          {strongConfirmChecked ? (
+                            <CheckSquare className="h-5 w-5 text-red-600" />
+                          ) : (
+                            <Square className="h-5 w-5 text-gray-400" />
+                          )}
+                        </button>
+                        <span className="text-sm text-red-700">
+                          我已仔细阅读并理解本次变更将对 {impactPreview.totalAffected} 个未办结工单造成影响，
+                          其中 {impactPreview.newlyOverdue} 个工单将变为超期，{impactPreview.riskElevated} 个工单风险等级将升高。
+                          确认继续执行此变更。
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {impactPreview.totalAffected === 0 && impactPreview.historicalAffected === 0 ? (
+                <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center">
+                  <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
+                  <p className="text-lg font-medium text-green-800">本次变更未影响任何工单</p>
+                  <p className="text-sm text-green-600 mt-1">所有工单的剩余工作日、风险等级和超期状态均保持不变</p>
+                </div>
+              ) : (
+                <>
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                      <div className="flex items-center space-x-2 text-gray-600 mb-1">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span className="text-xs font-medium">未办结工单</span>
+                      </div>
+                      <p className="text-2xl font-bold text-gray-900">{impactPreview.totalAffected}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-center space-x-2 text-slate-600 mb-1">
+                        <History className="h-4 w-4" />
+                        <span className="text-xs font-medium">历史工单</span>
+                      </div>
+                      <p className="text-2xl font-bold text-slate-700">{impactPreview.historicalAffected}</p>
+                    </div>
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                      <div className="flex items-center space-x-2 text-red-600 mb-1">
+                        <TrendingDown className="h-4 w-4" />
+                        <span className="text-xs font-medium">工作日减少</span>
+                      </div>
+                      <p className="text-2xl font-bold text-red-700">{impactPreview.workdaysDecreased}</p>
+                    </div>
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                      <div className="flex items-center space-x-2 text-green-600 mb-1">
+                        <TrendingUp className="h-4 w-4" />
+                        <span className="text-xs font-medium">工作日增加</span>
+                      </div>
+                      <p className="text-2xl font-bold text-green-700">{impactPreview.workdaysIncreased}</p>
+                    </div>
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                      <div className="flex items-center space-x-2 text-amber-600 mb-1">
+                        <AlertCircle className="h-4 w-4" />
+                        <span className="text-xs font-medium">风险/超期变化</span>
+                      </div>
+                      <p className="text-2xl font-bold text-amber-700">
+                        {impactPreview.riskElevated + impactPreview.newlyOverdue}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Change Breakdown */}
+                  {(impactPreview.newlyOverdue > 0 || impactPreview.noLongerOverdue > 0 || impactPreview.riskElevated > 0 || impactPreview.riskReduced > 0) && (
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-2">
+                      <p className="text-sm font-medium text-gray-700">变化明细：</p>
+                      <div className="flex flex-wrap gap-3 text-sm">
+                        {impactPreview.newlyOverdue > 0 && (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-red-100 text-red-700">
+                            <AlertCircle className="h-3.5 w-3.5 mr-1" />
+                            {impactPreview.newlyOverdue} 个变为超期
+                          </span>
+                        )}
+                        {impactPreview.noLongerOverdue > 0 && (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-green-100 text-green-700">
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                            {impactPreview.noLongerOverdue} 个解除超期
+                          </span>
+                        )}
+                        {impactPreview.riskElevated > 0 && (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
+                            <TrendingDown className="h-3.5 w-3.5 mr-1" />
+                            {impactPreview.riskElevated} 个风险等级升高
+                          </span>
+                        )}
+                        {impactPreview.riskReduced > 0 && (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-teal-100 text-teal-700">
+                            <TrendingUp className="h-3.5 w-3.5 mr-1" />
+                            {impactPreview.riskReduced} 个风险等级降低
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tabs */}
+                  <div className="border-b border-gray-200">
+                    <div className="flex space-x-1">
+                      <button
+                        onClick={() => setHistoricalTabActive(false)}
+                        className={clsx(
+                          'px-4 py-2 text-sm font-medium border-b-2 transition-colors',
+                          !historicalTabActive
+                            ? 'border-primary-500 text-primary-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                        )}
+                      >
+                        未办结工单（{impactPreview.affectedTickets.length}）
+                      </button>
+                      <button
+                        onClick={() => setHistoricalTabActive(true)}
+                        className={clsx(
+                          'px-4 py-2 text-sm font-medium border-b-2 transition-colors',
+                          historicalTabActive
+                            ? 'border-primary-500 text-primary-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                        )}
+                      >
+                        <History className="inline h-4 w-4 mr-1" />
+                        历史工单（{impactPreview.historicalTickets.length}）
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Affected Tickets List */}
+                  <div>
+                    <div className="rounded-lg border border-gray-200 overflow-hidden">
+                      <div className="max-h-80 overflow-y-auto">
+                        {!historicalTabActive ? (
+                          impactPreview.affectedTickets.length === 0 ? (
+                            <div className="p-8 text-center text-gray-500 text-sm">
+                              本次变更未影响任何未办结工单
+                            </div>
+                          ) : (
+                            <table className="w-full">
+                              <thead className="bg-gray-50 sticky top-0">
+                                <tr className="border-b border-gray-200">
+                                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                    工单信息
+                                  </th>
+                                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                    剩余工作日
+                                  </th>
+                                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                    风险等级
+                                  </th>
+                                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                    超期状态
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {impactPreview.affectedTickets.map((item, idx) => (
+                                  <tr key={`${item.ticketId}-${idx}`} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-3 py-3">
+                                      <div className="space-y-1">
+                                        <div className="flex items-center space-x-2">
+                                          <span className="text-xs font-mono text-gray-400">{item.ticketId}</span>
+                                          {item.isCoOrg && (
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700">
+                                              协办
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-sm font-medium text-gray-900 line-clamp-1">{item.ticketTitle}</p>
+                                        <p className="text-xs text-gray-500">
+                                          {item.isCoOrg ? `协办单位：${item.coOrgUnit}` : `承办单位：${item.handlerUnit}`}
+                                        </p>
+                                        <p className="text-xs text-gray-400">
+                                          <Clock className="inline h-3 w-3 mr-0.5" />
+                                          期限：{item.isCoOrg ? item.coOrgDeadline : item.deadline}
+                                        </p>
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      <div className="flex items-center space-x-2">
+                                        <span className={clsx(
+                                          'text-sm font-medium',
+                                          item.oldRemainingWorkdays < 0 ? 'text-red-600' : 'text-gray-700'
+                                        )}>
+                                          {item.oldRemainingWorkdays < 0
+                                            ? `超期${Math.abs(item.oldRemainingWorkdays)}天`
+                                            : item.oldRemainingWorkdays === 0
+                                              ? '今天到期'
+                                              : `${item.oldRemainingWorkdays}天`}
+                                        </span>
+                                        <ArrowRight className={clsx(
+                                          'h-3.5 w-3.5 flex-shrink-0',
+                                          item.workdaysChange < 0 ? 'text-red-500' : item.workdaysChange > 0 ? 'text-green-500' : 'text-gray-400'
+                                        )} />
+                                        <span className={clsx(
+                                          'text-sm font-medium',
+                                          item.newRemainingWorkdays < 0 ? 'text-red-600' : 'text-gray-700'
+                                        )}>
+                                          {item.newRemainingWorkdays < 0
+                                            ? `超期${Math.abs(item.newRemainingWorkdays)}天`
+                                            : item.newRemainingWorkdays === 0
+                                              ? '今天到期'
+                                              : `${item.newRemainingWorkdays}天`}
+                                        </span>
+                                        {item.workdaysChange !== 0 && (
+                                          <span className={clsx(
+                                            'text-xs px-1.5 py-0.5 rounded',
+                                            item.workdaysChange < 0
+                                              ? 'bg-red-100 text-red-600'
+                                              : 'bg-green-100 text-green-600'
+                                          )}>
+                                            {formatWorkdaysChange(item.workdaysChange)}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )
+                        ) : (
+                          impactPreview.historicalTickets.length === 0 ? (
+                            <div className="p-8 text-center text-gray-500 text-sm">
+                              本次变更未影响任何历史工单
+                            </div>
+                          ) : (
+                            <table className="w-full">
+                              <thead className="bg-gray-50 sticky top-0">
+                                <tr className="border-b border-gray-200">
+                                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                    工单信息
+                                  </th>
+                                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                    剩余工作日
+                                  </th>
+                                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                    风险等级
+                                  </th>
+                                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                    超期状态
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {impactPreview.historicalTickets.map((item, idx) => (
+                                  <tr key={`hist-${item.ticketId}-${idx}`} className="hover:bg-gray-50 transition-colors bg-slate-50/50">
+                                    <td className="px-3 py-3">
+                                      <div className="space-y-1">
+                                        <div className="flex items-center space-x-2">
+                                          <span className="text-xs font-mono text-gray-400">{item.ticketId}</span>
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-slate-200 text-slate-600">
+                                            历史
+                                          </span>
+                                        </div>
+                                        <p className="text-sm font-medium text-gray-900 line-clamp-1">{item.ticketTitle}</p>
+                                        <p className="text-xs text-gray-500">
+                                          承办单位：{item.handlerUnit}
+                                        </p>
+                                        <p className="text-xs text-gray-400">
+                                          <Clock className="inline h-3 w-3 mr-0.5" />
+                                          期限：{item.deadline}
+                                        </p>
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      <div className="flex items-center space-x-2">
+                                        <span className={clsx(
+                                          'text-sm font-medium',
+                                          item.oldRemainingWorkdays < 0 ? 'text-red-600' : 'text-gray-700'
+                                        )}>
+                                          {item.oldRemainingWorkdays < 0
+                                            ? `超期${Math.abs(item.oldRemainingWorkdays)}天`
+                                            : item.oldRemainingWorkdays === 0
+                                              ? '今天到期'
+                                              : `${item.oldRemainingWorkdays}天`}
+                                        </span>
+                                        <ArrowRight className={clsx(
+                                          'h-3.5 w-3.5 flex-shrink-0',
+                                          item.workdaysChange < 0 ? 'text-red-500' : item.workdaysChange > 0 ? 'text-green-500' : 'text-gray-400'
+                                        )} />
+                                        <span className={clsx(
+                                          'text-sm font-medium',
+                                          item.newRemainingWorkdays < 0 ? 'text-red-600' : 'text-gray-700'
+                                        )}>
+                                          {item.newRemainingWorkdays < 0
+                                            ? `超期${Math.abs(item.newRemainingWorkdays)}天`
+                                            : item.newRemainingWorkdays === 0
+                                              ? '今天到期'
+                                              : `${item.newRemainingWorkdays}天`}
+                                        </span>
+                                        {item.workdaysChange !== 0 && (
+                                          <span className={clsx(
+                                            'text-xs px-1.5 py-0.5 rounded',
+                                            item.workdaysChange < 0
+                                              ? 'bg-red-100 text-red-600'
+                                              : 'bg-green-100 text-green-600'
+                                          )}>
+                                            {formatWorkdaysChange(item.workdaysChange)}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      <div className="flex items-center space-x-2">
+                                        <span className={clsx(
+                                          'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium opacity-70',
+                                          getRiskBadgeClass(item.oldRiskLevel)
+                                        )}>
+                                          {getRiskLabel(item.oldRiskLevel)}
+                                        </span>
+                                        <ArrowRight className={clsx(
+                                          'h-3.5 w-3.5 flex-shrink-0',
+                                          item.riskLevelChanged ? 'text-amber-500' : 'text-gray-300'
+                                        )} />
+                                        <span className={clsx(
+                                          'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium opacity-70',
+                                          getRiskBadgeClass(item.newRiskLevel)
+                                        )}>
+                                          {getRiskLabel(item.newRiskLevel)}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      <div className="flex items-center space-x-2">
+                                        <span className={clsx(
+                                          'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium opacity-70',
+                                          item.oldIsOverdue
+                                            ? 'bg-red-100 text-red-700'
+                                            : 'bg-gray-100 text-gray-600'
+                                        )}>
+                                          {item.oldIsOverdue ? '已超期' : '未超期'}
+                                        </span>
+                                        <ArrowRight className={clsx(
+                                          'h-3.5 w-3.5 flex-shrink-0',
+                                          item.overdueStatusChanged ? (item.newIsOverdue ? 'text-red-500' : 'text-green-500') : 'text-gray-300'
+                                        )} />
+                                        <span className={clsx(
+                                          'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium opacity-70',
+                                          item.newIsOverdue
+                                            ? 'bg-red-100 text-red-700'
+                                            : 'bg-gray-100 text-gray-600'
+                                        )}>
+                                          {item.newIsOverdue ? '已超期' : '未超期'}
+                                        </span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="border-t border-gray-200 bg-gray-50 px-6 py-4">
+              <div className="mb-3 space-y-1">
+                <p className="text-xs font-medium text-gray-700">
+                  确认后将执行以下操作：
+                </p>
+                <ul className="text-xs text-gray-500 space-y-0.5 list-disc list-inside">
+                  <li>保存节假日配置变更</li>
+                  <li>清理过时的超期风险通知（基于旧配置的通知）</li>
+                  <li>重新生成基于新配置的超期风险通知</li>
+                  <li>刷新所有工单的风险等级和超期状态判断</li>
+                  <li>记录本次变更操作日志（包含影响范围统计）</li>
+                </ul>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-gray-400">
+                  本次将影响 <span className="font-medium text-gray-600">{impactPreview.totalAffected}</span> 个未办结工单
+                  {impactPreview.historicalAffected > 0 && (
+                    <> 和 <span className="font-medium text-gray-600">{impactPreview.historicalAffected}</span> 个历史工单</>
+                  )}
+                </div>
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={cancelImpactPreview}
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={executePendingAction}
+                    disabled={impactPreview.requiresStrongConfirmation && !strongConfirmChecked}
+                    className={clsx(
+                      'inline-flex items-center space-x-1.5 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors',
+                      impactPreview.requiresStrongConfirmation && !strongConfirmChecked
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : impactPreview.severity === 'critical'
+                          ? 'bg-red-600 hover:bg-red-700'
+                          : impactPreview.severity === 'high'
+                            ? 'bg-orange-600 hover:bg-orange-700'
+                            : impactPreview.totalAffected === 0 && impactPreview.historicalAffected === 0
+                              ? 'bg-primary-600 hover:bg-primary-700'
+                              : 'bg-amber-600 hover:bg-amber-700'
+                    )}
+                  >
+                    <Save className="h-4 w-4" />
+                    <span>
+                      {impactPreview.requiresStrongConfirmation && !strongConfirmChecked
+                        ? '请先勾选确认'
+                        : impactPreview.totalAffected === 0 && impactPreview.historicalAffected === 0
+                          ? '确认保存'
+                          : `确认保存并应用变更（影响 ${impactPreview.totalAffected + impactPreview.historicalAffected} 个工单）`}
+                    </span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

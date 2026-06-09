@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
+import { clsx } from 'clsx';
 
 interface PieChartProps {
   data: { label: string; value: number; color?: string }[];
   size?: number;
   innerRadius?: number;
+  onItemClick?: (label: string) => void;
 }
 
 const DEFAULT_COLORS = [
@@ -17,7 +19,7 @@ const DEFAULT_COLORS = [
   '#84cc16',
 ];
 
-export function PieChart({ data, size = 180, innerRadius = 50 }: PieChartProps) {
+export function PieChart({ data, size = 180, innerRadius = 50, onItemClick }: PieChartProps) {
   const total = useMemo(() => data.reduce((sum, item) => sum + item.value, 0), [data]);
 
   const segments = useMemo(() => {
@@ -71,7 +73,11 @@ export function PieChart({ data, size = 180, innerRadius = 50 }: PieChartProps) 
               key={index}
               d={segment.path}
               fill={segment.color}
-              className="transition-all duration-300 hover:opacity-80"
+              className={clsx(
+                'transition-all duration-300',
+                onItemClick && 'hover:opacity-80 cursor-pointer'
+              )}
+              onClick={() => onItemClick?.(segment.label)}
             />
           ))}
           <text
@@ -94,7 +100,14 @@ export function PieChart({ data, size = 180, innerRadius = 50 }: PieChartProps) 
       </div>
       <div className="flex-1 space-y-2">
         {segments.map((segment, index) => (
-          <div key={index} className="flex items-center gap-2">
+          <div
+            key={index}
+            className={clsx(
+              'flex items-center gap-2',
+              onItemClick && 'cursor-pointer hover:bg-gray-50 rounded px-1 -mx-1 py-0.5 transition-colors'
+            )}
+            onClick={() => onItemClick?.(segment.label)}
+          >
             <div
               className="w-3 h-3 rounded-full flex-shrink-0"
               style={{ backgroundColor: segment.color }}

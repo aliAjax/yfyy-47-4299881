@@ -163,10 +163,17 @@ function TicketItem({ ticket, showUnit = false }: TicketItemProps) {
             </span>
           )}
           {isCoOrganizing(ticket) && (
-            <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0">
-              <Users className="h-3 w-3" />
-              <span>协办中</span>
-            </span>
+            ticket.status === 'completed' || ticket.status === 'archived' ? (
+              <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-xs font-medium flex-shrink-0">
+                <AlertTriangle className="h-3 w-3" />
+                <span>含未完成协办</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0">
+                <Users className="h-3 w-3" />
+                <span>协办中</span>
+              </span>
+            )
           )}
         </div>
         <div className="flex items-center space-x-3 mt-1">

@@ -42,10 +42,12 @@ import {
   RiskItem,
   DynamicItem,
 } from '@/components/dashboard';
+import { Area, TicketCategory, HandlerUnit } from '@/types';
+import { clsx } from 'clsx';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { tickets } = useTicketStore();
+  const { tickets, currentRole, currentUnit } = useTicketStore();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -56,15 +58,25 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  const totalStats = useMemo(() => getTotalStats(tickets), [tickets]);
-  const trendData = useMemo(() => getTrendData(tickets, 7), [tickets]);
-  const areaData = useMemo(() => getAreaDistribution(tickets), [tickets]);
-  const unitRank = useMemo(() => getUnitOverdueRank(tickets), [tickets]);
-  const categoryData = useMemo(() => getCategoryRatio(tickets), [tickets]);
-  const riskTickets = useMemo(() => getHighRiskTickets(tickets, 20), [tickets]);
-  const dynamics = useMemo(() => getRecentDynamics(tickets, 30), [tickets]);
-  const urgeCount = useMemo(() => getUrgeCount(tickets), [tickets]);
-  const returnCount = useMemo(() => getReturnCount(tickets), [tickets]);
+  const scopedTickets = useMemo(() => {
+    if (currentRole === 'handler' && currentUnit) {
+      return tickets.filter(t =>
+        t.handlerUnit === currentUnit ||
+        t.coOrganizers?.some(co => co.unit === currentUnit)
+      );
+    }
+    return tickets;
+  }, [tickets, currentRole, currentUnit]);
+
+  const totalStats = useMemo(() => getTotalStats(scopedTickets), [scopedTickets]);
+  const trendData = useMemo(() => getTrendData(scopedTickets, 7), [scopedTickets]);
+  const areaData = useMemo(() => getAreaDistribution(scopedTickets), [scopedTickets]);
+  const unitRank = useMemo(() => getUnitOverdueRank(scopedTickets), [scopedTickets]);
+  const categoryData = useMemo(() => getCategoryRatio(scopedTickets), [scopedTickets]);
+  const riskTickets = useMemo(() => getHighRiskTickets(scopedTickets, 20), [scopedTickets]);
+  const dynamics = useMemo(() => getRecentDynamics(scopedTickets, 30), [scopedTickets]);
+  const urgeCount = useMemo(() => getUrgeCount(scopedTickets), [scopedTickets]);
+  const returnCount = useMemo(() => getReturnCount(scopedTickets), [scopedTickets]);
 
   const barChartData = useMemo(() =>
     areaData.map(item => ({ label: item.area, value: item.count })),
@@ -103,6 +115,86 @@ export default function Dashboard() {
     setTimeout(() => {
       setIsRefreshing(false);
     }, 1000);
+  };
+
+  const buildQueryString = (params: Record<string, string>) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) searchParams.set(key, value);
+    });
+    return searchParams.toString();
+  };
+
+  const goToTicketList = (filters: Record<string, string> = {}) => {
+    const query = buildQueryString(filters);
+    navigate(query ? `/?${query}` : '/');
+  };
+
+  const goToSupervision = (filters: Record<string, string> = {}) => {
+    const query = buildQueryString({ tab: 'risk', ...filters });
+    navigate(`/supervision?${query}`);
+  };
+
+  const handleAreaClick = (area: string) => {
+    goToTicketList({ area: area as Area });
+  };
+
+  const handleCategoryClick = (category: string) => {
+    goToTicketList({ category: category as TicketCategory });
+  };
+
+  const handleUnitOverdueClick = (unit: string) => {
+    goToSupervision({ handlerUnit: unit as HandlerUnit });
+  };
+
+  const handleHighRiskClick = () => {
+    goToSupervision({ riskLevel: 'high' });
+  };
+
+  const handleOverdueClick = () => {
+    goToSupervision({});
+  };
+
+  const handleReturnedClick = () => {
+    const query = buildQueryString({ tab: 'return' });
+    navigate(`/supervision?${query}`);
+  };
+
+  const handleTrendDateClick = (displayDate: string) => {
+    const today = new Date();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const year = today.getFullYear();
+    const fullDate = `${year}-${month}-${displayDate}`;
+    goToTicketList({ assignDate: fullDate });
+  };
+
+  const handleOverdueRateClick = () => {
+    goToSupervision({});
+  };
+
+  const handleCompletionRateClick = () => {
+    goToTicketList({ status: 'completed' });
+  };
+
+  const handleOnTimeRateClick = () => {
+    goToTicketList({ status: 'completed' });
+  };
+
+  const handleAreaClickCard = () => {
+    goToTicketList({});
+  };
+
+  const handleUnitClickCard = () => {
+    goToSupervision({});
+  };
+
+  const handleUrgeCountClick = () => {
+    const query = buildQueryString({ tab: 'urge' });
+    navigate(`/supervision?${query}`);
+  };
+
+  const handleDynamicsClick = () => {
+    goToSupervision({});
   };
 
   return (
@@ -145,56 +237,56 @@ export default function Dashboard() {
             value={totalStats.total}
             color="blue"
             icon={FileText}
-            onClick={() => navigate('/')}
+            onClick={() => goToTicketList()}
           />
           <StatItem
             label="今日新增"
             value={totalStats.todayNew}
             color="green"
             icon={Zap}
-            onClick={() => navigate('/')}
+            onClick={() => goToTicketList()}
           />
           <StatItem
             label="本周新增"
             value={totalStats.weekNew}
             color="purple"
             icon={Calendar}
-            onClick={() => navigate('/')}
+            onClick={() => goToTicketList()}
           />
           <StatItem
             label="待办理"
             value={totalStats.pending}
             color="yellow"
             icon={Clock}
-            onClick={() => navigate('/')}
+            onClick={() => goToTicketList({ status: 'pending' })}
           />
           <StatItem
             label="办理中"
             value={totalStats.processing}
             color="blue"
             icon={TrendingUp}
-            onClick={() => navigate('/')}
+            onClick={() => goToTicketList({ status: 'processing' })}
           />
           <StatItem
             label="已办结"
             value={totalStats.completed}
             color="green"
             icon={CheckCircle}
-            onClick={() => navigate('/')}
+            onClick={() => goToTicketList({ status: 'completed' })}
           />
           <StatItem
             label="已超期"
             value={totalStats.overdue}
             color="red"
             icon={AlertTriangle}
-            onClick={() => navigate('/supervision')}
+            onClick={handleOverdueClick}
           />
           <StatItem
             label="已退回"
             value={totalStats.returned}
             color="red"
             icon={XCircle}
-            onClick={() => navigate('/supervision')}
+            onClick={handleReturnedClick}
           />
         </div>
       </div>
@@ -205,22 +297,34 @@ export default function Dashboard() {
             title="工单总量趋势"
             icon={TrendingUp}
             className="lg:col-span-2"
-            action={<span className="text-xs text-gray-400">近7天</span>}
+            action={<span className="text-xs text-gray-400">近7天 · 点击日期查看详情</span>}
           >
-            <LineChart data={trendData} height={240} color="#3b82f6" />
+            <LineChart data={trendData} height={240} color="#3b82f6" onItemClick={handleTrendDateClick} />
           </DashboardCard>
 
-          <DashboardCard title="诉求类型占比" icon={PieChartIcon}>
-            <PieChart data={pieChartData} size={180} innerRadius={50} />
+          <DashboardCard
+            title="诉求类型占比"
+            icon={PieChartIcon}
+            action={<span className="text-xs text-gray-400">点击类型查看详情</span>}
+          >
+            <PieChart data={pieChartData} size={180} innerRadius={50} onItemClick={handleCategoryClick} />
           </DashboardCard>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <DashboardCard title="各区域工单分布" icon={MapPin}>
-            <BarChart data={barChartData} height={280} color="#3b82f6" horizontal={true} />
+          <DashboardCard
+            title="各区域工单分布"
+            icon={MapPin}
+            action={<span className="text-xs text-gray-400">点击区域查看详情</span>}
+          >
+            <BarChart data={barChartData} height={280} color="#3b82f6" horizontal={true} onItemClick={handleAreaClick} />
           </DashboardCard>
 
-          <DashboardCard title="承办单位超期排行" icon={BarChart3}>
+          <DashboardCard
+            title="承办单位超期排行"
+            icon={BarChart3}
+            action={<span className="text-xs text-gray-400">点击单位查看详情</span>}
+          >
             <div className="space-y-1 max-h-[300px] overflow-y-auto">
               {unitRank.map((item, index) => (
                 <RankItem
@@ -231,6 +335,7 @@ export default function Dashboard() {
                   subValue={`超期率 ${item.overdueRate}%`}
                   maxValue={maxOverdue}
                   color="#ef4444"
+                  onClick={() => handleUnitOverdueClick(item.unit)}
                 />
               ))}
               {unitRank.length === 0 && (
@@ -244,7 +349,14 @@ export default function Dashboard() {
           <DashboardCard
             title="高风险工单"
             icon={AlertTriangle}
-            action={<span className="text-xs text-red-500 font-medium">{riskTickets.length} 个高风险</span>}
+            action={
+              <button
+                onClick={handleHighRiskClick}
+                className="text-xs text-red-500 font-medium hover:text-red-600 transition-colors cursor-pointer"
+              >
+                {riskTickets.length} 个高风险 → 查看全部
+              </button>
+            }
           >
             <ScrollList height={340} speed={40}>
               {riskTickets.map(ticket => (
@@ -268,10 +380,14 @@ export default function Dashboard() {
             title="催办退回动态"
             icon={Activity}
             action={
-              <div className="flex items-center gap-3 text-xs">
+              <button
+                onClick={handleDynamicsClick}
+                className="flex items-center gap-3 text-xs cursor-pointer hover:opacity-80 transition-opacity"
+              >
                 <span className="text-orange-500">催办 {urgeCount}</span>
                 <span className="text-red-500">退回 {returnCount}</span>
-              </div>
+                <span className="text-gray-400">→ 查看全部</span>
+              </button>
             }
           >
             <ScrollList height={340} speed={35}>
@@ -294,7 +410,13 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+          <div
+            onClick={handleCompletionRateClick}
+            className={clsx(
+              "bg-white rounded-xl p-4 border border-gray-100 shadow-sm transition-shadow",
+              "cursor-pointer hover:shadow-md hover:border-green-200"
+            )}
+          >
             <div className="flex items-center gap-2 mb-2">
               <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center">
                 <ThumbsUp className="w-4 h-4 text-green-600" />
@@ -312,7 +434,13 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+          <div
+            onClick={handleOverdueRateClick}
+            className={clsx(
+              "bg-white rounded-xl p-4 border border-gray-100 shadow-sm transition-shadow",
+              "cursor-pointer hover:shadow-md hover:border-red-200"
+            )}
+          >
             <div className="flex items-center gap-2 mb-2">
               <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center">
                 <AlertCircle className="w-4 h-4 text-red-600" />
@@ -330,7 +458,13 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+          <div
+            onClick={handleOnTimeRateClick}
+            className={clsx(
+              "bg-white rounded-xl p-4 border border-gray-100 shadow-sm transition-shadow",
+              "cursor-pointer hover:shadow-md hover:border-blue-200"
+            )}
+          >
             <div className="flex items-center gap-2 mb-2">
               <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
                 <CheckCircle className="w-4 h-4 text-blue-600" />
@@ -348,7 +482,13 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+          <div
+            onClick={handleAreaClickCard}
+            className={clsx(
+              "bg-white rounded-xl p-4 border border-gray-100 shadow-sm transition-shadow",
+              "cursor-pointer hover:shadow-md hover:border-purple-200"
+            )}
+          >
             <div className="flex items-center gap-2 mb-2">
               <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
                 <MapPin className="w-4 h-4 text-purple-600" />
@@ -367,7 +507,13 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+          <div
+            onClick={handleUnitClickCard}
+            className={clsx(
+              "bg-white rounded-xl p-4 border border-gray-100 shadow-sm transition-shadow",
+              "cursor-pointer hover:shadow-md hover:border-orange-200"
+            )}
+          >
             <div className="flex items-center gap-2 mb-2">
               <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
                 <Timer className="w-4 h-4 text-orange-600" />
@@ -386,7 +532,13 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+          <div
+            onClick={handleUrgeCountClick}
+            className={clsx(
+              "bg-white rounded-xl p-4 border border-gray-100 shadow-sm transition-shadow",
+              "cursor-pointer hover:shadow-md hover:border-yellow-200"
+            )}
+          >
             <div className="flex items-center gap-2 mb-2">
               <div className="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center">
                 <AlertTriangle className="w-4 h-4 text-yellow-600" />

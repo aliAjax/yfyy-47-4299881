@@ -11,14 +11,14 @@ interface KnowledgeState {
   selectedCategory: TicketCategory | '';
   selectedUnit: HandlerUnit | '';
   statusFilter: 'all' | 'enabled' | 'disabled';
-  sortBy: 'updateTime' | 'useCount' | 'createTime';
+  sortBy: 'updateTime' | 'useCount' | 'createTime' | 'lastUsedTime';
   selectedIds: string[];
   
   setSearchKeyword: (keyword: string) => void;
   setSelectedCategory: (category: TicketCategory | '') => void;
   setSelectedUnit: (unit: HandlerUnit | '') => void;
   setStatusFilter: (status: 'all' | 'enabled' | 'disabled') => void;
-  setSortBy: (sort: 'updateTime' | 'useCount' | 'createTime') => void;
+  setSortBy: (sort: 'updateTime' | 'useCount' | 'createTime' | 'lastUsedTime') => void;
   
   toggleSelect: (id: string) => void;
   toggleSelectAll: () => void;
@@ -117,6 +117,14 @@ export const useKnowledgeStore = create<KnowledgeState>()(
           switch (sortBy) {
             case 'useCount':
               return b.useCount - a.useCount;
+            case 'lastUsedTime': {
+              const aTime = a.lastUsedTime || '';
+              const bTime = b.lastUsedTime || '';
+              if (!aTime && !bTime) return 0;
+              if (!aTime) return 1;
+              if (!bTime) return -1;
+              return bTime.localeCompare(aTime);
+            }
             case 'createTime':
               return b.createTime.localeCompare(a.createTime);
             case 'updateTime':
@@ -257,9 +265,7 @@ export const useKnowledgeStore = create<KnowledgeState>()(
         
         const result = applyTemplateToContent(currentContent, entry.replyTemplate, options);
         
-        if (options.mode === 'replace' || currentContent.trim() === '') {
-          get().incrementUseCount(entryId);
-        }
+        get().incrementUseCount(entryId);
         
         return result;
       },

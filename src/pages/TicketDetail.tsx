@@ -31,7 +31,8 @@ import {
   Plus,
   MessageSquare,
   CheckSquare,
-  Clock4
+  Clock4,
+  TrendingUp
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { useContactStore } from '@/store/useContactStore';
@@ -250,6 +251,7 @@ export default function TicketDetail() {
   const [expandedCoOrgId, setExpandedCoOrgId] = useState<string | null>(null);
   const [coOrgFilter, setCoOrgFilter] = useState<'all' | 'pending' | 'processing' | 'completed'>('all');
   const coOrgSectionRef = useRef<HTMLDivElement>(null);
+  const [showCoOrgWarningModal, setShowCoOrgWarningModal] = useState(false);
 
   const currentUserCoOrganizer = useMemo(() => {
     if (!ticket || currentRole !== 'handler' || !currentUnit) return undefined;
@@ -260,6 +262,8 @@ export default function TicketDetail() {
   const coOrgTotalCount = ticket?.coOrganizers?.length || 0;
   const coOrgPendingCount = ticket?.coOrganizers?.filter(co => co.status === 'pending').length || 0;
   const coOrgProcessingCount = ticket?.coOrganizers?.filter(co => co.status === 'processing').length || 0;
+  const uncompletedCoOrganizers = ticket?.coOrganizers?.filter(co => co.status !== 'completed') || [];
+  const hasUncompletedCoOrg = uncompletedCoOrganizers.length > 0;
 
   const filteredCoOrganizers = useMemo(() => {
     if (!ticket?.coOrganizers) return [];
@@ -328,7 +332,7 @@ export default function TicketDetail() {
     setShowProgressForm(false);
   };
 
-  const handleSubmitResult = () => {
+  const doSubmitResult = (ignoreUncompletedCoOrg: boolean = false) => {
     if (!resultText.trim()) return;
     
     const attachments: Attachment[] = pendingAttachments.map(file => ({
@@ -339,11 +343,22 @@ export default function TicketDetail() {
       uploadTime: formatDateTime(new Date()),
     }));
     
-    submitResult(ticket.id, resultText, attachments);
+    submitResult(ticket.id, resultText, attachments, ignoreUncompletedCoOrg);
     setResultText('');
     setPendingAttachments([]);
     setAttachmentError('');
     setShowResultForm(false);
+    setShowCoOrgWarningModal(false);
+  };
+
+  const handleSubmitResult = () => {
+    if (!resultText.trim()) return;
+    
+    if (hasUncompletedCoOrg) {
+      setShowCoOrgWarningModal(true);
+    } else {
+      doSubmitResult(false);
+    }
   };
 
   const handleFileSelect = (files: FileList | null) => {
@@ -565,10 +580,17 @@ export default function TicketDetail() {
                 </div>
                 <div className="flex items-center space-x-2">
                   {isCoOrganizing(ticket) && (
-                    <span className="inline-flex items-center space-x-1 rounded-full bg-indigo-500/30 border border-indigo-300/50 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
-                      <Users className="h-3 w-3" />
-                      <span>协办中</span>
-                    </span>
+                    ticket.status === 'completed' || ticket.status === 'archived' ? (
+                      <span className="inline-flex items-center space-x-1 rounded-full bg-amber-500/40 border border-amber-300/60 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
+                        <AlertTriangle className="h-3 w-3" />
+                        <span>含未完成协办</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center space-x-1 rounded-full bg-indigo-500/30 border border-indigo-300/50 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
+                        <Users className="h-3 w-3" />
+                        <span>协办中</span>
+                      </span>
+                    )
                   )}
                   <StatusBadge status={ticket.status} />
                 </div>
@@ -653,12 +675,32 @@ export default function TicketDetail() {
               {/* Result */}
               {ticket.result && (
                 <div className="mt-6">
-                  <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                    <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                    办理结果
+                  <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center flex-wrap gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    <span>办理结果</span>
+                    {hasUncompletedCoOrg && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        含未完成协办
+                      </span>
+                    )}
                   </h3>
-                  <div className="rounded-lg bg-green-50 border border-green-200 p-4">
+                  <div className={clsx(
+                    'rounded-lg border p-4',
+                    hasUncompletedCoOrg 
+                      ? 'bg-amber-50 border-amber-200' 
+                      : 'bg-green-50 border-green-200'
+                  )}>
                     <p className="text-sm text-gray-700 leading-relaxed">{ticket.result}</p>
+                    {hasUncompletedCoOrg && (
+                      <p className="mt-3 text-xs text-amber-700 flex items-start space-x-1">
+                        <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                        <span>
+                          该工单提交办理结果时仍有 {uncompletedCoOrganizers.length} 个协办单位未完成工作：
+                          {uncompletedCoOrganizers.map(co => co.unit).join('、')}
+                        </span>
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -918,9 +960,26 @@ export default function TicketDetail() {
                                   {getKnowledgeMatchReasonText(match)}
                                 </p>
                                 <div className="flex items-center justify-between">
-                                  <span className="text-xs text-gray-400">
-                                    {match.entry.recommendedUnit} • {match.entry.useCount}次使用
-                                  </span>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-xs text-gray-400">
+                                      {match.entry.recommendedUnit}
+                                    </span>
+                                    {match.entry.useCount > 0 && (
+                                      <span className={clsx(
+                                        'text-xs flex items-center space-x-0.5 font-medium',
+                                        match.entry.useCount > 100 ? 'text-green-600' :
+                                        match.entry.useCount > 50 ? 'text-amber-600' : 'text-gray-500'
+                                      )}>
+                                        <TrendingUp className="h-3 w-3" />
+                                        <span>{match.entry.useCount}次</span>
+                                      </span>
+                                    )}
+                                    {match.entry.lastUsedTime && (
+                                      <span className="text-xs text-gray-400">
+                                        • {match.entry.lastUsedTime.split(' ')[0]}
+                                      </span>
+                                    )}
+                                  </div>
                                   <ChevronDown
                                     className={clsx(
                                       'h-3.5 w-3.5 text-amber-400 transition-transform',
@@ -1836,6 +1895,85 @@ export default function TicketDetail() {
                 className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 确认完成
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Uncompleted Co-org Warning Modal */}
+      {showCoOrgWarningModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+            <div className="border-b border-gray-200 px-6 py-4 flex items-center space-x-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">存在未完成协办事项</h3>
+                <p className="text-xs text-gray-500 mt-0.5">以下协办单位尚未完成协办工作</p>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 mb-4">
+                <div className="flex items-center space-x-2 mb-3">
+                  <Users className="h-4 w-4 text-amber-700" />
+                  <span className="text-sm font-medium text-amber-800">
+                    未完成协办单位（共 {uncompletedCoOrganizers.length} 个）
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {uncompletedCoOrganizers.map((coOrg) => (
+                    <div
+                      key={coOrg.id}
+                      className="flex items-center justify-between rounded-lg bg-white border border-amber-200/60 px-3 py-2"
+                    >
+                      <div className="flex items-center space-x-2 min-w-0">
+                        <div className={clsx(
+                          'flex h-7 w-7 items-center justify-center rounded-lg flex-shrink-0',
+                          coOrg.status === 'processing' ? 'bg-blue-100' : 'bg-yellow-100'
+                        )}>
+                          {coOrg.status === 'processing'
+                            ? <RefreshCw className="h-3.5 w-3.5 text-blue-600" />
+                            : <Clock4 className="h-3.5 w-3.5 text-yellow-600" />
+                          }
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900">{coOrg.unit}</p>
+                          <p className="text-xs text-gray-500 truncate">
+                            要求：{coOrg.requirement}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={clsx(
+                        'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ml-2',
+                        coOrg.status === 'processing'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-yellow-100 text-yellow-700'
+                      )}>
+                        {CO_ORG_STATUS_LABELS[coOrg.status]}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className="text-sm text-gray-600">
+                继续提交将忽略未完成的协办事项，直接将工单标记为已办结，并在时间线中记录相关说明。督办员也将收到该工单仍有未完成协办的通知。
+              </p>
+            </div>
+            <div className="flex justify-between space-x-3 border-t border-gray-200 px-6 py-4">
+              <button
+                onClick={() => setShowCoOrgWarningModal(false)}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                返回等待
+              </button>
+              <button
+                onClick={() => doSubmitResult(true)}
+                className="inline-flex items-center space-x-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 transition-colors"
+              >
+                <CheckCircle className="h-4 w-4" />
+                <span>继续提交</span>
               </button>
             </div>
           </div>

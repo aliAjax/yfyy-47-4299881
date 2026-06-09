@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { clsx } from 'clsx';
 
 const CHART_WIDTH = 100;
 const CHART_PADDING = { top: 20, right: 10, bottom: 30, left: 40 };
@@ -7,9 +8,10 @@ interface LineChartProps {
   data: { date: string; count: number }[];
   height?: number;
   color?: string;
+  onItemClick?: (date: string) => void;
 }
 
-export function LineChart({ data, height = 200, color = '#3b82f6' }: LineChartProps) {
+export function LineChart({ data, height = 200, color = '#3b82f6', onItemClick }: LineChartProps) {
   const maxValue = useMemo(() => {
     const max = Math.max(...data.map(d => d.count), 1);
     return Math.ceil(max * 1.2);
@@ -106,14 +108,25 @@ export function LineChart({ data, height = 200, color = '#3b82f6' }: LineChartPr
         />
 
         {points.map((point, i) => (
-          <g key={i}>
-            <circle cx={point.x} cy={point.y} r="2" fill={color} />
+          <g
+            key={i}
+            className={clsx(onItemClick && 'cursor-pointer')}
+            onClick={() => onItemClick?.(point.date)}
+          >
+            <circle
+              cx={point.x}
+              cy={point.y}
+              r={onItemClick ? '2.5' : '2'}
+              fill={color}
+              className={clsx(onItemClick && 'transition-all hover:r-3.5')}
+            />
             <text
               x={point.x}
               y={height - CHART_PADDING.bottom + 12}
               textAnchor="middle"
               fontSize="3"
               fill="#6b7280"
+              className={clsx(onItemClick && 'hover:fill-primary-600')}
             >
               {point.date}
             </text>

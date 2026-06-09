@@ -1,4 +1,4 @@
-import { Notification, NotificationType, NOTIFICATION_TYPE_LABELS } from '@/types';
+import { Notification, NotificationType, NOTIFICATION_TYPE_LABELS, NotificationAudience, OverdueRiskStage } from '@/types';
 import { generateId, formatDateTime } from './date';
 
 export function createNotification(
@@ -7,7 +7,14 @@ export function createNotification(
   ticketTitle: string,
   content: string,
   operator?: string,
-  relatedId?: string
+  relatedId?: string,
+  options?: {
+    audience?: NotificationAudience;
+    targetUnit?: string;
+    riskStage?: OverdueRiskStage;
+    remainingWorkdays?: number;
+    hasUncompletedCoOrg?: boolean;
+  }
 ): Notification {
   return {
     id: generateId(),
@@ -20,6 +27,11 @@ export function createNotification(
     createTime: formatDateTime(new Date()),
     operator,
     relatedId,
+    audience: options?.audience,
+    targetUnit: options?.targetUnit,
+    riskStage: options?.riskStage,
+    remainingWorkdays: options?.remainingWorkdays,
+    hasUncompletedCoOrg: options?.hasUncompletedCoOrg,
   };
 }
 

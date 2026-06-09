@@ -913,9 +913,32 @@ function createMockKnowledge(
   replyTemplate: string,
   keyPoints: string,
   useCount: number = 0,
-  enabled: boolean = true
+  enabled: boolean = true,
+  lastUsedDaysAgo?: number
 ): KnowledgeEntry {
-  const nowStr = formatDateTime(new Date());
+  const now = new Date();
+  const nowStr = formatDateTime(now);
+
+  let lastUsedTime: string | undefined;
+  if (useCount > 0) {
+    let daysAgo: number;
+    if (lastUsedDaysAgo !== undefined) {
+      daysAgo = lastUsedDaysAgo;
+    } else if (useCount > 150) {
+      daysAgo = Math.floor(Math.random() * 3) + 1;
+    } else if (useCount > 80) {
+      daysAgo = Math.floor(Math.random() * 7) + 3;
+    } else if (useCount > 30) {
+      daysAgo = Math.floor(Math.random() * 14) + 7;
+    } else {
+      daysAgo = Math.floor(Math.random() * 30) + 15;
+    }
+    const lastUsedDate = addDays(now, -daysAgo);
+    lastUsedTime = formatDateTime(lastUsedDate);
+  }
+
+  const createDate = addDays(now, -(Math.floor(Math.random() * 60) + 30));
+
   return {
     id: generateId(),
     title,
@@ -927,9 +950,9 @@ function createMockKnowledge(
     keyPoints,
     enabled,
     useCount,
-    createTime: nowStr,
-    updateTime: nowStr,
-    lastUsedTime: useCount > 0 ? nowStr : undefined,
+    createTime: formatDateTime(createDate),
+    updateTime: lastUsedTime || nowStr,
+    lastUsedTime,
   };
 }
 

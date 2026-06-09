@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Ticket, TicketStatus, ProgressLog, FilterOptions, UrgeRecord, ReturnRecord, Attachment, DispatchInfo, ArchiveInfo, ArchiveFilterOptions, SatisfactionLevel, QualityLevel, ProblemTag, CoOrganizer, CoOrgProgressLog, HandlerUnit } from '@/types';
+import { Ticket, TicketStatus, ProgressLog, FilterOptions, UrgeRecord, ReturnRecord, Attachment, DispatchInfo, ArchiveInfo, ArchiveFilterOptions, SatisfactionLevel, QualityLevel, ProblemTag, CoOrganizer, CoOrgProgressLog, HandlerUnit, CO_ORG_STATUS_LABELS } from '@/types';
 import { mockTickets } from '@/data/mockData';
 import { generateId, formatDateTime } from '@/utils/date';
 import { getWorkdaysRemaining } from '@/utils/workday';
@@ -34,7 +34,7 @@ interface TicketState {
   batchAddTickets: (tickets: Omit<Ticket, 'id' | 'progressLogs' | 'attachments' | 'urgeRecords' | 'returnRecords' | 'creator' | 'status' | 'archiveInfo' | 'coOrganizers'>[]) => number;
   updateTicketStatus: (ticketId: string, status: TicketStatus) => void;
   addProgressLog: (ticketId: string, content: string, type: ProgressLog['type'], operator: string) => void;
-  submitResult: (ticketId: string, result: string, attachments?: Attachment[]) => void;
+  submitResult: (ticketId: string, result: string, attachments?: Attachment[], ignoreUncompletedCoOrg?: boolean) => void;
   
   urgeTicket: (ticketId: string, reason: string, operator: string) => void;
   returnTicket: (ticketId: string, reason: string, operator: string) => void;
@@ -111,6 +111,7 @@ const initialFilterOptions: FilterOptions = {
   category: '',
   deadlineRange: '',
   hasCoOrganizer: 'all',
+  assignDate: '',
 };
 
 const initialArchiveFilterOptions: ArchiveFilterOptions = {
@@ -212,6 +213,10 @@ export const useTicketStore = create<TicketState>()(
           }
         }
 
+        if (filterOptions.assignDate) {
+          filtered = filtered.filter(t => t.assignTime.split(' ')[0] === filterOptions.assignDate);
+        }
+
         return filtered.sort((a, b) => new Date(b.assignTime).getTime() - new Date(a.assignTime).getTime());
       },
 
@@ -275,6 +280,8 @@ export const useTicketStore = create<TicketState>()(
         set((state) => ({
           tickets: [newTicket, ...state.tickets],
         }));
+        
+        setTimeout(() => useNotificationStore.getState().checkOverdueSoon(), 0);
       },
 
       batchAddTickets: (ticketsData) => {
@@ -317,6 +324,7 @@ export const useTicketStore = create<TicketState>()(
           tickets: [...newTickets, ...state.tickets],
         }));
 
+        setTimeout(() => useNotificationStore.getState().checkOverdueSoon(), 0);
         return newTickets.length;
       },
 
@@ -326,6 +334,8 @@ export const useTicketStore = create<TicketState>()(
             t.id === ticketId ? { ...t, status } : t
           ),
         }));
+        
+        setTimeout(() => useNotificationStore.getState().checkOverdueSoon(), 0);
       },
 
       addProgressLog: (ticketId, content, type, operator) => {
@@ -346,16 +356,35 @@ export const useTicketStore = create<TicketState>()(
         }));
       },
 
-      submitResult: (ticketId, result, attachments) => {
+      submitResult: (ticketId, result, attachments, ignoreUncompletedCoOrg) => {
         const now = formatDateTime(new Date());
+        const ticket = get().tickets.find(t => t.id === ticketId);
+        const uncompletedCoOrgs = ticket?.coOrganizers?.filter(co => co.status !== 'completed') || [];
+        const hasUncompletedCoOrg = uncompletedCoOrgs.length > 0;
+        
         const completeLog: ProgressLog = {
           id: generateId(),
           ticketId,
-          content: '已提交办理结果',
+          content: hasUncompletedCoOrg && ignoreUncompletedCoOrg 
+            ? `已提交办理结果（忽略未完成协办：${uncompletedCoOrgs.map(co => co.unit).join('、')}）`
+            : '已提交办理结果',
           operator: '承办单位经办人',
           createTime: now,
-          type: 'complete',
+          type: hasUncompletedCoOrg && ignoreUncompletedCoOrg ? 'complete_ignore_coorg' : 'complete',
         };
+        
+        const additionalLogs: ProgressLog[] = [];
+        if (hasUncompletedCoOrg && ignoreUncompletedCoOrg) {
+          additionalLogs.push({
+            id: generateId(),
+            ticketId,
+            content: `【忽略协办说明】以下协办单位尚未完成协办工作：${uncompletedCoOrgs.map(co => `${co.unit}（${CO_ORG_STATUS_LABELS[co.status]}）`).join('；')}，主办单位已选择忽略并提交最终办理结果`,
+            operator: '承办单位经办人',
+            createTime: now,
+            type: 'complete_ignore_coorg',
+          });
+        }
+        
         set((state) => ({
           tickets: state.tickets.map(t => 
             t.id === ticketId 
@@ -363,20 +392,29 @@ export const useTicketStore = create<TicketState>()(
                   ...t, 
                   status: 'completed', 
                   result, 
-                  progressLogs: [...t.progressLogs, completeLog],
+                  progressLogs: [...t.progressLogs, completeLog, ...additionalLogs],
                   attachments: attachments ? [...t.attachments, ...attachments] : t.attachments,
                 } 
               : t
           ),
         }));
         
-        const ticket = get().tickets.find(t => t.id === ticketId);
-        if (ticket) {
+        const updatedTicket = get().tickets.find(t => t.id === ticketId);
+        if (updatedTicket) {
+          let notificationContent = '承办单位已提交办理结果，请督办员审核归档';
+          if (hasUncompletedCoOrg && ignoreUncompletedCoOrg) {
+            notificationContent = `承办单位已提交办理结果（仍有 ${uncompletedCoOrgs.length} 个协办单位未完成：${uncompletedCoOrgs.map(co => co.unit).join('、')}），请督办员审核归档`;
+          }
           useNotificationStore.getState().addNotificationByType(
             'result_submit',
             ticketId,
-            `承办单位已提交办理结果，请督办员审核归档`,
-            '承办单位经办人'
+            notificationContent,
+            '承办单位经办人',
+            undefined,
+            {
+              audience: 'supervisor',
+              hasUncompletedCoOrg: hasUncompletedCoOrg && ignoreUncompletedCoOrg ? true : undefined,
+            }
           );
         }
       },

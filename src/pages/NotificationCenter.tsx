@@ -14,7 +14,8 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { useNotificationStore } from '@/store/useNotificationStore';
-import { NOTIFICATION_TYPE_LABELS, NotificationType } from '@/types';
+import { useTicketStore } from '@/store/useTicketStore';
+import { NOTIFICATION_TYPE_LABELS, NotificationType, OverdueRiskStage, NotificationAudience } from '@/types';
 import { clsx } from 'clsx';
 
 const typeIcons: Record<NotificationType, React.ComponentType<{ className?: string }>> = {
@@ -33,6 +34,24 @@ const typeColors: Record<NotificationType, { bg: string; text: string; icon: str
   result_submit: { bg: 'bg-green-50', text: 'text-green-700', icon: 'text-green-600', dot: 'bg-green-500', border: 'border-green-200' },
 };
 
+const riskStageLabels: Record<OverdueRiskStage, string> = {
+  overdue: '已超期',
+  within_1_day: '高风险',
+  within_3_days: '中风险',
+};
+
+const riskStageColors: Record<OverdueRiskStage, string> = {
+  overdue: 'bg-red-100 text-red-700 border-red-200',
+  within_1_day: 'bg-orange-100 text-orange-700 border-orange-200',
+  within_3_days: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+};
+
+const audienceLabels: Record<Exclude<NotificationAudience, 'all'>, string> = {
+  supervisor: '督办员',
+  handler_unit: '主办单位',
+  coorg_unit: '协办单位',
+};
+
 const allTypes: NotificationType[] = ['urge', 'return', 'overdue_soon', 'coorg_request', 'result_submit'];
 
 export default function NotificationCenter() {
@@ -45,41 +64,55 @@ export default function NotificationCenter() {
   const markAllAsRead = useNotificationStore((state) => state.markAllAsRead);
   const clearReadNotifications = useNotificationStore((state) => state.clearReadNotifications);
   const deleteNotification = useNotificationStore((state) => state.deleteNotification);
+  const currentRole = useTicketStore((state) => state.currentRole);
+  const currentUnit = useTicketStore((state) => state.currentUnit);
 
-  const filteredNotifications = useMemo(() => {
-    let filtered = [...notifications];
+  const visibleNotifications = useMemo(() => {
+    return notifications.filter(n => {
+      const audience = n.audience as string | undefined;
+      if (!audience || audience === 'all') return true;
+      if (currentRole === 'supervisor') {
+        return audience === 'supervisor' || audience === 'all';
+      }
+      if (currentRole === 'handler' && currentUnit) {
+        if (audience === 'handler_unit' && n.targetUnit === currentUnit) return true;
+        if (audience === 'coorg_unit' && n.targetUnit === currentUnit) return true;
+        return false;
+      }
+      return true;
+    });
+  }, [notifications, currentRole, currentUnit]);
 
-    if (filter.type) {
-      filtered = filtered.filter((n) => n.type === filter.type);
-    }
-
-    if (filter.readStatus === 'unread') {
-      filtered = filtered.filter((n) => !n.isRead);
-    } else if (filter.readStatus === 'read') {
-      filtered = filtered.filter((n) => n.isRead);
-    }
-
-    return filtered.sort(
-      (a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime()
-    );
-  }, [notifications, filter]);
+  const unreadCount = useMemo(() => {
+    return visibleNotifications.filter(n => !n.isRead).length;
+  }, [visibleNotifications]);
 
   const stats = useMemo(() => {
     const statMap = {} as Record<NotificationType, { total: number; unread: number }>;
-    const types: NotificationType[] = ['urge', 'return', 'overdue_soon', 'coorg_request', 'result_submit'];
-    types.forEach((type) => {
-      const typeNotifications = notifications.filter((n) => n.type === type);
+    allTypes.forEach((type) => {
+      const typeNotifications = visibleNotifications.filter((n) => n.type === type);
       statMap[type] = {
         total: typeNotifications.length,
         unread: typeNotifications.filter((n) => !n.isRead).length,
       };
     });
     return statMap;
-  }, [notifications]);
+  }, [visibleNotifications]);
 
-  const unreadCount = useMemo(() => {
-    return notifications.filter((n) => !n.isRead).length;
-  }, [notifications]);
+  const filteredNotifications = useMemo(() => {
+    let filtered = [...visibleNotifications];
+    if (filter.type) {
+      filtered = filtered.filter((n) => n.type === filter.type);
+    }
+    if (filter.readStatus === 'unread') {
+      filtered = filtered.filter((n) => !n.isRead);
+    } else if (filter.readStatus === 'read') {
+      filtered = filtered.filter((n) => n.isRead);
+    }
+    return filtered.sort(
+      (a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime()
+    );
+  }, [visibleNotifications, filter]);
 
   const handleNotificationClick = (notificationId: string, ticketId: string) => {
     markAsRead(notificationId);
@@ -101,7 +134,7 @@ export default function NotificationCenter() {
         <div>
           <h1 className="text-xl font-semibold text-gray-900">督办通知中心</h1>
           <p className="mt-1 text-sm text-gray-500">
-            共 {notifications.length} 条通知，其中 <span className="font-medium text-primary-600">{unreadCount} 条未读</span>
+            共 {visibleNotifications.length} 条通知，其中 <span className="font-medium text-primary-600">{unreadCount} 条未读</span>
           </p>
         </div>
         <div className="flex items-center space-x-3">
@@ -120,10 +153,10 @@ export default function NotificationCenter() {
           </button>
           <button
             onClick={clearReadNotifications}
-            disabled={notifications.filter(n => n.isRead).length === 0}
+            disabled={visibleNotifications.filter(n => n.isRead).length === 0}
             className={clsx(
               'inline-flex items-center space-x-1.5 rounded-lg border px-4 py-2 text-sm font-medium transition-colors',
-              notifications.filter(n => n.isRead).length > 0
+              visibleNotifications.filter(n => n.isRead).length > 0
                 ? 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
                 : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
             )}
@@ -247,7 +280,7 @@ export default function NotificationCenter() {
                   
                   <div className="flex-1 min-w-0 pt-0.5">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center flex-wrap gap-1.5">
                         <span className={clsx('text-sm font-semibold', notification.isRead ? 'text-gray-700' : 'text-gray-900')}>
                           {notification.title}
                         </span>
@@ -258,8 +291,37 @@ export default function NotificationCenter() {
                         )}>
                           {NOTIFICATION_TYPE_LABELS[notification.type]}
                         </span>
+                        {notification.hasUncompletedCoOrg && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            含未完成协办
+                          </span>
+                        )}
+                        {notification.type === 'overdue_soon' && notification.riskStage && (
+                          <span className={clsx(
+                            'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border',
+                            riskStageColors[notification.riskStage]
+                          )}>
+                            {riskStageLabels[notification.riskStage]}
+                          </span>
+                        )}
+                        {notification.audience && notification.audience !== 'all' && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                            {audienceLabels[notification.audience]}
+                            {notification.targetUnit && `：${notification.targetUnit}`}
+                          </span>
+                        )}
+                        {notification.type === 'overdue_soon' && notification.remainingWorkdays !== undefined && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-50 text-slate-600 border border-slate-200">
+                            {notification.remainingWorkdays < 0
+                              ? `超期${Math.abs(notification.remainingWorkdays)}个工作日`
+                              : notification.remainingWorkdays === 0
+                                ? '今天到期'
+                                : `剩余${notification.remainingWorkdays}个工作日`}
+                          </span>
+                        )}
                       </div>
-                      <span className="text-xs text-gray-400 flex-shrink-0">
+                      <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
                         {notification.createTime}
                       </span>
                     </div>

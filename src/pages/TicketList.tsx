@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Clock, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles, Users } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Clock, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles, Users, AlertTriangle } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { StatsCard } from '@/components/StatsCard';
 import { FilterBar } from '@/components/FilterBar';
 import { FilterViewSelector } from '@/components/FilterViewSelector';
 import { StatusBadge } from '@/components/StatusBadge';
-import { Ticket, FilterOptions } from '@/types';
+import { Ticket, FilterOptions, TicketStatus, Area, HandlerUnit, TicketCategory } from '@/types';
 import { useWorkday } from '@/hooks/useWorkday';
 import { useFilterViews } from '@/hooks/useFilterViews';
 import { clsx } from 'clsx';
@@ -18,20 +18,47 @@ function isFilterEqual(a: FilterOptions, b: FilterOptions): boolean {
     a.handlerUnit === b.handlerUnit &&
     a.category === b.category &&
     a.deadlineRange === b.deadlineRange &&
-    a.hasCoOrganizer === b.hasCoOrganizer
+    a.hasCoOrganizer === b.hasCoOrganizer &&
+    a.assignDate === b.assignDate
   );
 }
 
 export default function TicketList() {
   const navigate = useNavigate();
-  const { getFilteredTickets, getTicketStats, setFilterOptions, filterOptions, isCoOrganizing, getTicketRole, currentRole, currentUnit } = useTicketStore();
+  const [searchParams] = useSearchParams();
+  const { getFilteredTickets, getTicketStats, setFilterOptions, resetFilters, filterOptions, isCoOrganizing, getTicketRole, currentRole, currentUnit } = useTicketStore();
   const { getDeadlineLabel, getRiskLevel } = useWorkday();
   const { views } = useFilterViews();
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const isApplyingViewRef = useRef(false);
+  const hasAppliedUrlParams = useRef(false);
 
   const tickets = getFilteredTickets();
   const stats = getTicketStats();
+
+  useEffect(() => {
+    if (hasAppliedUrlParams.current) return;
+    const urlFilters: Partial<FilterOptions> = {};
+    const status = searchParams.get('status') as TicketStatus | '';
+    const area = searchParams.get('area') as Area | '';
+    const handlerUnit = searchParams.get('handlerUnit') as HandlerUnit | '';
+    const category = searchParams.get('category') as TicketCategory | '';
+    const deadlineRange = searchParams.get('deadlineRange');
+    const assignDate = searchParams.get('assignDate') || '';
+
+    if (status) urlFilters.status = status;
+    if (area) urlFilters.area = area;
+    if (handlerUnit) urlFilters.handlerUnit = handlerUnit;
+    if (category) urlFilters.category = category;
+    if (deadlineRange) urlFilters.deadlineRange = deadlineRange;
+    if (assignDate) urlFilters.assignDate = assignDate;
+
+    if (Object.keys(urlFilters).length > 0) {
+      resetFilters();
+      setFilterOptions(urlFilters);
+    }
+    hasAppliedUrlParams.current = true;
+  }, [searchParams, resetFilters, setFilterOptions]);
 
   useEffect(() => {
     if (isApplyingViewRef.current) {
@@ -188,13 +215,23 @@ export default function TicketList() {
                           </span>
                         )}
                         {isCoOrganizing(ticket) && (
-                          <span
-                            className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0"
-                            title="协办中"
-                          >
-                            <Users className="h-3 w-3" />
-                            <span>协办中</span>
-                          </span>
+                          ticket.status === 'completed' || ticket.status === 'archived' ? (
+                            <span
+                              className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-xs font-medium flex-shrink-0"
+                              title="已办结但仍有未完成协办"
+                            >
+                              <AlertTriangle className="h-3 w-3" />
+                              <span>含未完成协办</span>
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0"
+                              title="协办中"
+                            >
+                              <Users className="h-3 w-3" />
+                              <span>协办中</span>
+                            </span>
+                          )
                         )}
                         {ticket.dispatchInfo?.dispatchMethod && ticket.dispatchInfo.dispatchMethod !== 'manual' && (
                           <span

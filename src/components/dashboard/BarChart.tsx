@@ -9,9 +9,10 @@ interface BarChartProps {
   height?: number;
   color?: string;
   horizontal?: boolean;
+  onItemClick?: (label: string) => void;
 }
 
-export function BarChart({ data, height = 220, color = '#3b82f6', horizontal = false }: BarChartProps) {
+export function BarChart({ data, height = 220, color = '#3b82f6', horizontal = false, onItemClick }: BarChartProps) {
   const maxValue = useMemo(() => {
     const max = Math.max(...data.map(d => d.value), 1);
     return Math.ceil(max * 1.2);
@@ -40,7 +41,14 @@ export function BarChart({ data, height = 220, color = '#3b82f6', horizontal = f
         {data.map((item, index) => {
           const percentage = (item.value / maxValue) * 100;
           return (
-            <div key={index} className="flex items-center gap-3">
+            <div
+              key={index}
+              className={clsx(
+                'flex items-center gap-3',
+                onItemClick && 'cursor-pointer hover:bg-gray-50 rounded-lg px-1 -mx-1 py-0.5 transition-colors'
+              )}
+              onClick={() => onItemClick?.(item.label)}
+            >
               <div className="w-24 flex-shrink-0 text-xs text-gray-600 truncate text-right">
                 {item.label}
               </div>
@@ -139,16 +147,23 @@ interface RankItemProps {
   subValue?: string;
   maxValue: number;
   color?: string;
+  onClick?: () => void;
 }
 
-export function RankItem({ rank, label, value, subValue, maxValue, color = '#ef4444' }: RankItemProps) {
+export function RankItem({ rank, label, value, subValue, maxValue, color = '#ef4444', onClick }: RankItemProps) {
   const percentage = (value / maxValue) * 100;
   
   const rankColors = ['#ef4444', '#f97316', '#eab308', '#3b82f6', '#6b7280'];
   const rankBgColors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-blue-500', 'bg-gray-400'];
 
   return (
-    <div className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
+    <div
+      className={clsx(
+        'flex items-center gap-3 py-2 border-b border-gray-100 last:border-0',
+        onClick && 'cursor-pointer hover:bg-gray-50 transition-colors rounded-lg px-1 -mx-1'
+      )}
+      onClick={onClick}
+    >
       <div className={clsx(
         'w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold text-white flex-shrink-0',
         rank <= 3 ? rankBgColors[rank - 1] : 'bg-gray-300'

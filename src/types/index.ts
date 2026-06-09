@@ -85,7 +85,8 @@ export type ProgressLogType =
   | 'archive'
   | 'coorg_assign'
   | 'coorg_progress'
-  | 'coorg_complete';
+  | 'coorg_complete'
+  | 'complete_ignore_coorg';
 
 export interface ProgressLog {
   id: string;
@@ -216,6 +217,7 @@ export interface FilterOptions {
   category: TicketCategory | '';
   deadlineRange: string;
   hasCoOrganizer: 'all' | 'yes' | 'no';
+  assignDate: string;
 }
 
 export interface FilterView {
@@ -417,6 +419,10 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   result_submit: '办理结果',
 };
 
+export type NotificationAudience = 'supervisor' | 'handler_unit' | 'coorg_unit' | 'all';
+
+export type OverdueRiskStage = 'overdue' | 'within_1_day' | 'within_3_days';
+
 export interface Notification {
   id: string;
   type: NotificationType;
@@ -428,4 +434,52 @@ export interface Notification {
   createTime: string;
   operator?: string;
   relatedId?: string;
+  audience?: NotificationAudience;
+  targetUnit?: string;
+  riskStage?: OverdueRiskStage;
+  remainingWorkdays?: number;
+  hasUncompletedCoOrg?: boolean;
+}
+
+export type ImpactSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export type HolidayChangeType = 'add' | 'update' | 'delete' | 'reset';
+
+export interface HistoricalTicketImpact {
+  ticketId: string;
+  ticketTitle: string;
+  handlerUnit: string;
+  deadline: string;
+  oldRemainingWorkdays: number;
+  newRemainingWorkdays: number;
+  workdaysChange: number;
+  oldRiskLevel: RiskLevel;
+  newRiskLevel: RiskLevel;
+  riskLevelChanged: boolean;
+  oldIsOverdue: boolean;
+  newIsOverdue: boolean;
+  overdueStatusChanged: boolean;
+  isCoOrg: boolean;
+  coOrgUnit?: string;
+  coOrgDeadline?: string;
+}
+
+export interface HolidayChangeRecord {
+  id: string;
+  changeType: HolidayChangeType;
+  changeDescription: string;
+  oldHolidayDates: string[];
+  oldWorkdayDates: string[];
+  newHolidayDates: string[];
+  newWorkdayDates: string[];
+  affectedOpenTickets: number;
+  affectedHistoricalTickets: number;
+  newlyOverdue: number;
+  noLongerOverdue: number;
+  riskElevated: number;
+  riskReduced: number;
+  notificationsCreated: number;
+  notificationsInvalidated: number;
+  operator: string;
+  createTime: string;
 }

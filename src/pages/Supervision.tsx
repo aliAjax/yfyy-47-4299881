@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   AlertTriangle, 
@@ -12,12 +12,15 @@ import {
   Info,
   Monitor,
   ExternalLink,
-  Users
+  Users,
+  Filter,
+  X
 } from 'lucide-react';
 import { useTicketStore } from '@/store/useTicketStore';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useWorkday } from '@/hooks/useWorkday';
 import { clsx } from 'clsx';
+import { Ticket, HandlerUnit } from '@/types';
 
 type TabType = 'risk' | 'pendingUrge' | 'urge' | 'return';
 
@@ -25,9 +28,42 @@ const VALID_TABS: TabType[] = ['risk', 'pendingUrge', 'urge', 'return'];
 
 export default function Supervision() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const { getRiskTickets, getUrgeRecords, getReturnRecords, getSupervisorTodoTickets, tickets, isCoOrganizing } = useTicketStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { getRiskTickets, getUrgeRecords, getReturnRecords, getSupervisorTodoTickets, tickets, isCoOrganizing, currentRole, currentUnit } = useTicketStore();
   const { getDeadlineLabel, getWorkdaysRemaining: getDaysRemaining } = useWorkday();
+
+  const urlHandlerUnit = searchParams.get('handlerUnit') as HandlerUnit | '';
+  const urlRiskLevel = searchParams.get('riskLevel') as 'high' | 'medium' | 'low' | '';
+
+  const filterByUnit = (list: Ticket[]) => {
+    let result = list;
+    if (currentRole === 'handler' && currentUnit) {
+      result = result.filter(t =>
+        t.handlerUnit === currentUnit ||
+        t.coOrganizers?.some(co => co.unit === currentUnit)
+      );
+    }
+    if (urlHandlerUnit) {
+      result = result.filter(t => t.handlerUnit === urlHandlerUnit);
+    }
+    return result;
+  };
+
+  const urlFilterParams = useMemo(() => {
+    const params: Record<string, string> = {};
+    if (urlHandlerUnit) params.handlerUnit = urlHandlerUnit;
+    if (urlRiskLevel) params.riskLevel = urlRiskLevel;
+    return params;
+  }, [urlHandlerUnit, urlRiskLevel]);
+
+  const hasUrlFilters = Object.keys(urlFilterParams).length > 0;
+
+  const handleClearFilters = () => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('handlerUnit');
+    newParams.delete('riskLevel');
+    setSearchParams(newParams);
+  };
   
   const tabFromUrl = searchParams.get('tab') as TabType | null;
   const initialTab = tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : 'risk';
@@ -44,22 +80,101 @@ export default function Supervision() {
     navigate(`/supervision?tab=${tab}`, { replace: true });
   };
   
-  const riskTickets = getRiskTickets();
-  const pendingUrgeTickets = getSupervisorTodoTickets('pendingUrge');
+  const rawRiskTickets = getRiskTickets();
+  const rawPendingUrgeTickets = getSupervisorTodoTickets('pendingUrge');
   const urgeRecords = getUrgeRecords();
   const returnRecords = getReturnRecords();
 
+  const riskTickets = useMemo(() => {
+    let high = filterByUnit(rawRiskTickets.high);
+    let medium = filterByUnit(rawRiskTickets.medium);
+    let low = filterByUnit(rawRiskTickets.low);
+
+    if (urlRiskLevel === 'high') {
+      medium = [];
+      low = [];
+    } else if (urlRiskLevel === 'medium') {
+      high = [];
+      low = [];
+    } else if (urlRiskLevel === 'low') {
+      high = [];
+      medium = [];
+    }
+
+    return { high, medium, low };
+  }, [rawRiskTickets, urlRiskLevel, urlHandlerUnit, currentRole, currentUnit]);
+
+  const pendingUrgeTickets = useMemo(() => {
+    return filterByUnit(rawPendingUrgeTickets);
+  }, [rawPendingUrgeTickets, urlHandlerUnit, currentRole, currentUnit]);
+
   const getTicketById = (id: string) => tickets.find(t => t.id === id);
+
+  const filteredReturnRecords = useMemo(() => {
+    if (!urlHandlerUnit && !(currentRole === 'handler' && currentUnit)) return returnRecords;
+    return returnRecords.filter(r => {
+      const ticket = getTicketById(r.ticketId);
+      if (!ticket) return false;
+      if (currentRole === 'handler' && currentUnit) {
+        if (ticket.handlerUnit !== currentUnit && !ticket.coOrganizers?.some(co => co.unit === currentUnit)) {
+          return false;
+        }
+      }
+      if (urlHandlerUnit && ticket.handlerUnit !== urlHandlerUnit) return false;
+      return true;
+    });
+  }, [returnRecords, urlHandlerUnit, currentRole, currentUnit, tickets]);
+
+  const filteredUrgeRecords = useMemo(() => {
+    if (!urlHandlerUnit && !(currentRole === 'handler' && currentUnit)) return urgeRecords;
+    return urgeRecords.filter(r => {
+      const ticket = getTicketById(r.ticketId);
+      if (!ticket) return false;
+      if (currentRole === 'handler' && currentUnit) {
+        if (ticket.handlerUnit !== currentUnit && !ticket.coOrganizers?.some(co => co.unit === currentUnit)) {
+          return false;
+        }
+      }
+      if (urlHandlerUnit && ticket.handlerUnit !== urlHandlerUnit) return false;
+      return true;
+    });
+  }, [urgeRecords, urlHandlerUnit, currentRole, currentUnit, tickets]);
 
   const tabs = [
     { key: 'risk' as TabType, label: '超期风险', icon: AlertTriangle, count: riskTickets.high.length + riskTickets.medium.length },
     { key: 'pendingUrge' as TabType, label: '待催办工单', icon: Bell, count: pendingUrgeTickets.length },
-    { key: 'urge' as TabType, label: '催办记录', icon: Bell, count: urgeRecords.length },
-    { key: 'return' as TabType, label: '退回重办', icon: RotateCcw, count: returnRecords.length },
+    { key: 'urge' as TabType, label: '催办记录', icon: Bell, count: filteredUrgeRecords.length },
+    { key: 'return' as TabType, label: '退回重办', icon: RotateCcw, count: filteredReturnRecords.length },
   ];
 
   return (
     <div className="space-y-6">
+      {/* Active Filters */}
+      {hasUrlFilters && (
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50 border border-blue-200">
+          <Filter className="h-4 w-4 text-blue-600 flex-shrink-0" />
+          <span className="text-sm text-blue-700 font-medium">当前筛选：</span>
+          <div className="flex items-center gap-2 flex-wrap flex-1">
+            {urlHandlerUnit && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white rounded-full text-xs text-blue-700 border border-blue-200">
+                承办单位：{urlHandlerUnit}
+              </span>
+            )}
+            {urlRiskLevel && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white rounded-full text-xs text-blue-700 border border-blue-200">
+                风险等级：{urlRiskLevel === 'high' ? '高风险' : urlRiskLevel === 'medium' ? '中风险' : '低风险'}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={handleClearFilters}
+            className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-md transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+            清除筛选
+          </button>
+        </div>
+      )}
       {/* Dashboard Quick Entry */}
       <div
         onClick={() => navigate('/dashboard')}
@@ -204,10 +319,17 @@ export default function Supervision() {
                               <div className="flex items-center space-x-2">
                                 <span className="text-sm text-gray-900 max-w-xs truncate">{ticket.title}</span>
                                 {isCoOrganizing(ticket) && (
-                                  <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0">
-                                    <Users className="h-3 w-3" />
-                                    <span>协办中</span>
-                                  </span>
+                                  ticket.status === 'completed' || ticket.status === 'archived' ? (
+                                    <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-xs font-medium flex-shrink-0">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      <span>含未完成协办</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0">
+                                      <Users className="h-3 w-3" />
+                                      <span>协办中</span>
+                                    </span>
+                                  )
                                 )}
                               </div>
                             </td>
@@ -265,10 +387,17 @@ export default function Supervision() {
                               <div className="flex items-center space-x-2">
                                 <span className="text-sm text-gray-900 max-w-xs truncate">{ticket.title}</span>
                                 {isCoOrganizing(ticket) && (
-                                  <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0">
-                                    <Users className="h-3 w-3" />
-                                    <span>协办中</span>
-                                  </span>
+                                  ticket.status === 'completed' || ticket.status === 'archived' ? (
+                                    <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-xs font-medium flex-shrink-0">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      <span>含未完成协办</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0">
+                                      <Users className="h-3 w-3" />
+                                      <span>协办中</span>
+                                    </span>
+                                  )
                                 )}
                               </div>
                             </td>
@@ -326,10 +455,17 @@ export default function Supervision() {
                             <div className="flex items-center space-x-2">
                               <span className="text-sm text-gray-900 max-w-xs truncate">{ticket.title}</span>
                               {isCoOrganizing(ticket) && (
-                                <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0">
-                                  <Users className="h-3 w-3" />
-                                  <span>协办中</span>
-                                </span>
+                                ticket.status === 'completed' || ticket.status === 'archived' ? (
+                                  <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-xs font-medium flex-shrink-0">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    <span>含未完成协办</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-medium flex-shrink-0">
+                                    <Users className="h-3 w-3" />
+                                    <span>协办中</span>
+                                  </span>
+                                )
                               )}
                             </div>
                           </td>
@@ -356,14 +492,14 @@ export default function Supervision() {
           {/* 催办记录 */}
           {activeTab === 'urge' && (
             <div>
-              {urgeRecords.length === 0 ? (
+              {filteredUrgeRecords.length === 0 ? (
                 <div className="py-12 text-center">
                   <Bell className="mx-auto h-12 w-12 text-gray-300 mb-3" />
                   <p className="text-gray-500">暂无催办记录</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {urgeRecords.map((record) => {
+                  {filteredUrgeRecords.map((record) => {
                     const ticket = getTicketById(record.ticketId);
                     return (
                       <div
@@ -404,14 +540,14 @@ export default function Supervision() {
           {/* 退回重办 */}
           {activeTab === 'return' && (
             <div>
-              {returnRecords.length === 0 ? (
+              {filteredReturnRecords.length === 0 ? (
                 <div className="py-12 text-center">
                   <RotateCcw className="mx-auto h-12 w-12 text-gray-300 mb-3" />
                   <p className="text-gray-500">暂无退回重办记录</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {returnRecords.map((record) => {
+                  {filteredReturnRecords.map((record) => {
                     const ticket = getTicketById(record.ticketId);
                     return (
                       <div
@@ -459,33 +595,46 @@ export default function Supervision() {
             各单位超期情况
           </h3>
           <div className="space-y-3">
-            {['城市管理委员会', '交通委员会', '住房和城乡建设委员会', '人力资源和社会保障局'].map((unit) => {
-              const unitTickets = tickets.filter(t => t.handlerUnit === unit && t.status !== 'completed');
-              const overdueCount = unitTickets.filter(t => {
-                const days = getDaysRemaining(t.deadline);
-                return days < 0 || t.status === 'overdue';
-              }).length;
-              const total = unitTickets.length;
-              const percent = total > 0 ? Math.round((overdueCount / total) * 100) : 0;
-              
-              return (
-                <div key={unit} className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-700">{unit}</span>
-                    <span className="text-xs text-gray-500">{overdueCount}/{total} 件</span>
+            {(() => {
+              let scopedTickets = tickets;
+              if (currentRole === 'handler' && currentUnit) {
+                scopedTickets = scopedTickets.filter(t =>
+                  t.handlerUnit === currentUnit ||
+                  t.coOrganizers?.some(co => co.unit === currentUnit)
+                );
+              }
+              const displayUnits = currentRole === 'handler' && currentUnit
+                ? [currentUnit]
+                : ['城市管理委员会', '交通委员会', '住房和城乡建设委员会', '人力资源和社会保障局'];
+
+              return displayUnits.map((unit) => {
+                const unitTickets = scopedTickets.filter(t => t.handlerUnit === unit && t.status !== 'completed');
+                const overdueCount = unitTickets.filter(t => {
+                  const days = getDaysRemaining(t.deadline);
+                  return days < 0 || t.status === 'overdue';
+                }).length;
+                const total = unitTickets.length;
+                const percent = total > 0 ? Math.round((overdueCount / total) * 100) : 0;
+                
+                return (
+                  <div key={unit} className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700">{unit}</span>
+                      <span className="text-xs text-gray-500">{overdueCount}/{total} 件</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        className={clsx(
+                          'h-full rounded-full transition-all',
+                          percent > 50 ? 'bg-red-500' : percent > 20 ? 'bg-orange-500' : 'bg-green-500'
+                        )}
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                    <div
-                      className={clsx(
-                        'h-full rounded-full transition-all',
-                        percent > 50 ? 'bg-red-500' : percent > 20 ? 'bg-orange-500' : 'bg-green-500'
-                      )}
-                      style={{ width: `${percent}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
         </div>
 
@@ -497,7 +646,19 @@ export default function Supervision() {
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-lg bg-blue-50 p-4 text-center">
               <p className="text-2xl font-bold text-blue-700">
-                {tickets.filter(t => t.status === 'completed').length}
+                {(() => {
+                  let scopedTickets = tickets;
+                  if (currentRole === 'handler' && currentUnit) {
+                    scopedTickets = scopedTickets.filter(t =>
+                      t.handlerUnit === currentUnit ||
+                      t.coOrganizers?.some(co => co.unit === currentUnit)
+                    );
+                  }
+                  if (urlHandlerUnit) {
+                    scopedTickets = scopedTickets.filter(t => t.handlerUnit === urlHandlerUnit);
+                  }
+                  return scopedTickets.filter(t => t.status === 'completed').length;
+                })()}
               </p>
               <p className="text-xs text-blue-600 mt-1">已办结工单</p>
             </div>
@@ -510,7 +671,7 @@ export default function Supervision() {
               <p className="text-xs text-yellow-600 mt-1">平均办理时长</p>
             </div>
             <div className="rounded-lg bg-red-50 p-4 text-center">
-              <p className="text-2xl font-bold text-red-700">{urgeRecords.length}</p>
+              <p className="text-2xl font-bold text-red-700">{filteredUrgeRecords.length}</p>
               <p className="text-xs text-red-600 mt-1">累计催办次数</p>
             </div>
           </div>
