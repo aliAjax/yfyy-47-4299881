@@ -39,7 +39,7 @@ export default function NewTicket() {
   const { getOnDutyContact, getContactsByUnit } = useContactStore();
   const { getEnabledRules } = useDispatchRuleStore();
   const { getEnabledRules: getEnabledSLARules } = useSLARuleStore();
-  const { searchEntries } = useKnowledgeBaseStore();
+  const { searchEntries, incrementUseCount } = useKnowledgeBaseStore();
   const { calculateDeadline } = useWorkday();
 
   const [formData, setFormData] = useState({
@@ -216,6 +216,7 @@ export default function NewTicket() {
 
   const applyKnowledgeEntry = (match: KnowledgeMatchResult) => {
     const { entry } = match;
+    incrementUseCount(entry.id);
     setFormData(prev => {
       const templateText = `\n\n【知识库模板】${entry.replyTemplate}`;
       return {

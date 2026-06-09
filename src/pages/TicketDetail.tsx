@@ -66,7 +66,7 @@ export default function TicketDetail() {
     archiveTicket
   } = useTicketStore();
   const { getOnDutyContact, getContactsByUnit } = useContactStore();
-  const { searchEntries } = useKnowledgeBaseStore();
+  const { searchEntries, incrementUseCount } = useKnowledgeBaseStore();
   const markTicketNotificationsAsRead = useNotificationStore(state => state.markTicketNotificationsAsRead);
   const { getRiskLevel, getDeadlineLabel } = useWorkday();
   
@@ -131,10 +131,6 @@ export default function TicketDetail() {
   const pendingCollaborations = collaborationRecords.filter(record => record.status !== 'completed');
   const completedCollaborations = collaborationRecords.filter(record => record.status === 'completed');
   const isPrimaryHandler = currentRole === 'handler' && (!currentUnit || ticket.handlerUnit === currentUnit);
-  const myCollaborationRecords = currentRole === 'handler' && currentUnit
-    ? collaborationRecords.filter(record => record.unit === currentUnit)
-    : [];
-  const canWorkAsCollaborator = myCollaborationRecords.some(record => record.status !== 'completed');
   const canPrimaryHandle = currentRole === 'handler' && isPrimaryHandler;
   const availableCollaborationUnits = HANDLER_UNITS.filter(unit =>
     unit !== ticket.handlerUnit && !collaborationRecords.some(record => record.unit === unit)
@@ -197,7 +193,8 @@ export default function TicketDetail() {
   };
 
   const applyResultKnowledgeEntry = (match: KnowledgeMatchResult) => {
-    const { replyTemplate } = match.entry;
+    const { id: entryId, replyTemplate } = match.entry;
+    incrementUseCount(entryId);
     setResultText(prev => {
       if (prev.includes(replyTemplate)) return prev;
       return `${prev.trim()}${prev.trim() ? '\n\n' : ''}${replyTemplate}`;

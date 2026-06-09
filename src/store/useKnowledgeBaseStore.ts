@@ -5,6 +5,8 @@ import { mockKnowledgeBaseEntries } from '@/data/mockData';
 import { generateId, formatDateTime } from '@/utils/date';
 import { matchKnowledgeEntries, validateKnowledgeEntry } from '@/utils/knowledgeBase';
 
+type KnowledgeBaseEntryPayload = Omit<KnowledgeBaseEntry, 'id' | 'createTime' | 'updateTime' | 'useCount' | 'lastUsedTime'>;
+
 interface KnowledgeBaseState {
   entries: KnowledgeBaseEntry[];
 
@@ -19,8 +21,9 @@ interface KnowledgeBaseState {
     handlerUnit?: HandlerUnit | '';
   }) => ReturnType<typeof matchKnowledgeEntries>;
 
-  addEntry: (entry: Omit<KnowledgeBaseEntry, 'id' | 'createTime' | 'updateTime'>) => { success: boolean; errors: string[] };
+  addEntry: (entry: KnowledgeBaseEntryPayload) => { success: boolean; errors: string[] };
   updateEntry: (id: string, updates: Partial<KnowledgeBaseEntry>) => { success: boolean; errors: string[] };
+  incrementUseCount: (id: string) => void;
   deleteEntry: (id: string) => void;
   toggleEntry: (id: string) => void;
   resetEntries: () => void;
@@ -49,6 +52,7 @@ export const useKnowledgeBaseStore = create<KnowledgeBaseState>()(
         const newEntry: KnowledgeBaseEntry = {
           ...entryData,
           id: generateId(),
+          useCount: 0,
           createTime: now,
           updateTime: now,
         };
@@ -79,6 +83,21 @@ export const useKnowledgeBaseStore = create<KnowledgeBaseState>()(
         }));
 
         return { success: true, errors: [] };
+      },
+
+      incrementUseCount: (id) => {
+        const now = formatDateTime(new Date());
+        set((state) => ({
+          entries: state.entries.map(entry =>
+            entry.id === id
+              ? {
+                  ...entry,
+                  useCount: (entry.useCount ?? 0) + 1,
+                  lastUsedTime: now,
+                }
+              : entry
+          ),
+        }));
       },
 
       deleteEntry: (id) => {

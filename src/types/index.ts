@@ -322,6 +322,8 @@ export interface KnowledgeBaseEntry {
   handlerUnit: HandlerUnit;
   replyTemplate: string;
   handlingPoints: string[];
+  useCount: number;
+  lastUsedTime?: string;
   enabled: boolean;
   createTime: string;
   updateTime: string;

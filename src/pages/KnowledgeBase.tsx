@@ -5,11 +5,13 @@ import {
   Building2,
   Edit2,
   Filter,
+  Flame,
   Plus,
   RotateCcw,
   Save,
   Search,
   Tag,
+  TrendingUp,
   ToggleLeft,
   ToggleRight,
   Trash2,
@@ -19,6 +21,8 @@ import {
 import { useKnowledgeBaseStore } from '@/store/useKnowledgeBaseStore';
 import { CATEGORIES, HANDLER_UNITS, HandlerUnit, TicketCategory } from '@/types';
 import { clsx } from 'clsx';
+
+type KnowledgeSortMode = 'updated' | 'useCount' | 'lastUsed';
 
 interface KnowledgeFormData {
   title: string;
@@ -44,12 +48,21 @@ function splitList(value: string) {
   return value.split(/[，,、\n]+/).map(item => item.trim()).filter(Boolean);
 }
 
+function getTimeValue(value?: string) {
+  return value ? new Date(value).getTime() : 0;
+}
+
+function formatLastUsed(value?: string) {
+  return value || '未使用';
+}
+
 export default function KnowledgeBase() {
   const { entries, addEntry, updateEntry, deleteEntry, toggleEntry, resetEntries } = useKnowledgeBaseStore();
 
   const [searchText, setSearchText] = useState('');
   const [filterCategory, setFilterCategory] = useState<TicketCategory | ''>('');
   const [filterUnit, setFilterUnit] = useState<HandlerUnit | ''>('');
+  const [sortMode, setSortMode] = useState<KnowledgeSortMode>('useCount');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<KnowledgeFormData>(initialFormData);
@@ -69,15 +82,41 @@ export default function KnowledgeBase() {
       if (filterCategory && entry.category !== filterCategory) return false;
       if (filterUnit && entry.handlerUnit !== filterUnit) return false;
       return true;
-    }).sort((a, b) => Number(b.enabled) - Number(a.enabled) || new Date(b.updateTime).getTime() - new Date(a.updateTime).getTime());
-  }, [entries, filterCategory, filterUnit, searchText]);
+    }).sort((a, b) => {
+      const enabledSort = Number(b.enabled) - Number(a.enabled);
+      if (enabledSort !== 0) return enabledSort;
 
-  const stats = useMemo(() => ({
-    total: entries.length,
-    enabled: entries.filter(entry => entry.enabled).length,
-    disabled: entries.filter(entry => !entry.enabled).length,
-    templates: entries.filter(entry => entry.replyTemplate.trim()).length,
-  }), [entries]);
+      if (sortMode === 'useCount') {
+        return (b.useCount ?? 0) - (a.useCount ?? 0) || getTimeValue(b.lastUsedTime) - getTimeValue(a.lastUsedTime);
+      }
+      if (sortMode === 'lastUsed') {
+        return getTimeValue(b.lastUsedTime) - getTimeValue(a.lastUsedTime) || (b.useCount ?? 0) - (a.useCount ?? 0);
+      }
+      return new Date(b.updateTime).getTime() - new Date(a.updateTime).getTime();
+    });
+  }, [entries, filterCategory, filterUnit, searchText, sortMode]);
+
+  const hotEntries = useMemo(
+    () => [...entries]
+      .filter(entry => (entry.useCount ?? 0) > 0)
+      .sort((a, b) => (b.useCount ?? 0) - (a.useCount ?? 0) || getTimeValue(b.lastUsedTime) - getTimeValue(a.lastUsedTime))
+      .slice(0, 5),
+    [entries]
+  );
+
+  const stats = useMemo(() => {
+    const totalUseCount = entries.reduce((sum, entry) => sum + (entry.useCount ?? 0), 0);
+    const recentlyUsedEntry = [...entries].sort((a, b) => getTimeValue(b.lastUsedTime) - getTimeValue(a.lastUsedTime))[0];
+
+    return {
+      total: entries.length,
+      enabled: entries.filter(entry => entry.enabled).length,
+      disabled: entries.filter(entry => !entry.enabled).length,
+      templates: entries.filter(entry => entry.replyTemplate.trim()).length,
+      totalUseCount,
+      recentlyUsedTime: recentlyUsedEntry?.lastUsedTime,
+    };
+  }, [entries]);
 
   const handleOpenAdd = () => {
     setEditingId(null);
@@ -188,8 +227,51 @@ export default function KnowledgeBase() {
           <p className="mt-1 text-2xl font-semibold text-gray-500">{stats.disabled}</p>
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <p className="text-sm text-gray-500">累计使用</p>
+          <p className="mt-1 text-2xl font-semibold text-primary-600">{stats.totalUseCount}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 shadow-sm lg:col-span-2">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Flame className="h-5 w-5 text-amber-600" />
+              <h3 className="text-sm font-semibold text-amber-900">使用热度 Top5</h3>
+            </div>
+            <span className="text-xs text-amber-700">按使用次数统计</span>
+          </div>
+          {hotEntries.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-amber-200 bg-white/60 py-6 text-center text-sm text-amber-700">
+              暂无模板使用记录
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {hotEntries.map((entry, index) => (
+                <div key={entry.id} className="rounded-lg border border-amber-100 bg-white p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-gray-900">
+                        {index + 1}. {entry.title}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-500">最近使用：{formatLastUsed(entry.lastUsedTime)}</p>
+                    </div>
+                    <span className="flex-shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                      {entry.useCount ?? 0} 次
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <p className="text-sm text-gray-500">模板数量</p>
           <p className="mt-1 text-2xl font-semibold text-primary-600">{stats.templates}</p>
+          <div className="mt-4 rounded-lg bg-gray-50 p-3">
+            <p className="text-xs text-gray-500">最近一次使用</p>
+            <p className="mt-1 text-sm font-medium text-gray-900">{formatLastUsed(stats.recentlyUsedTime)}</p>
+          </div>
         </div>
       </div>
 
@@ -228,6 +310,15 @@ export default function KnowledgeBase() {
               {HANDLER_UNITS.map(unit => (
                 <option key={unit} value={unit}>{unit}</option>
               ))}
+            </select>
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as KnowledgeSortMode)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            >
+              <option value="useCount">按使用热度</option>
+              <option value="lastUsed">按最近使用</option>
+              <option value="updated">按更新时间</option>
             </select>
           </div>
         </div>
@@ -274,6 +365,13 @@ export default function KnowledgeBase() {
                       <span className="inline-flex items-center space-x-1 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700">
                         <Zap className="h-3 w-3" />
                         <span>{entry.keywords.join('、')}</span>
+                      </span>
+                      <span className="inline-flex items-center space-x-1 rounded-md bg-rose-50 px-2 py-1 text-xs text-rose-700">
+                        <TrendingUp className="h-3 w-3" />
+                        <span>使用 {entry.useCount ?? 0} 次</span>
+                      </span>
+                      <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600">
+                        最近使用：{formatLastUsed(entry.lastUsedTime)}
                       </span>
                     </div>
                     <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-gray-600">

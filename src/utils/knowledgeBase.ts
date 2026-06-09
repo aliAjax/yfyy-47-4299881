@@ -94,7 +94,7 @@ export function getKnowledgeMatchReasonText(result: KnowledgeMatchResult): strin
 }
 
 export function validateKnowledgeEntry(
-  entry: Omit<KnowledgeBaseEntry, 'id' | 'createTime' | 'updateTime'>
+  entry: Omit<KnowledgeBaseEntry, 'id' | 'createTime' | 'updateTime' | 'useCount' | 'lastUsedTime'>
 ): string[] {
   const errors: string[] = [];
 

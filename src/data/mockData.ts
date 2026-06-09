@@ -608,9 +608,14 @@ function createMockKnowledgeEntry(
   handlerUnit: HandlerUnit,
   replyTemplate: string,
   handlingPoints: string[],
-  enabled: boolean = true
+  enabled: boolean = true,
+  useCount: number = 0,
+  lastUsedDaysAgo?: number
 ): KnowledgeBaseEntry {
   const nowStr = formatDateTime(new Date());
+  const lastUsedTime = typeof lastUsedDaysAgo === 'number'
+    ? formatDateTime(addDays(new Date(), -lastUsedDaysAgo))
+    : undefined;
   return {
     id: generateId(),
     title,
@@ -619,6 +624,8 @@ function createMockKnowledgeEntry(
     handlerUnit,
     replyTemplate,
     handlingPoints,
+    useCount,
+    lastUsedTime,
     enabled,
     createTime: nowStr,
     updateTime: nowStr,
@@ -632,7 +639,10 @@ export const mockKnowledgeBaseEntries: KnowledgeBaseEntry[] = [
     ['路灯', '照明', '灯不亮', '路灯损坏', '夜间出行'],
     '城市管理委员会',
     '经核查，群众反映的路灯照明问题已安排养护单位到场排查。对确属设施故障的，将及时维修更换并做好夜间巡查；如涉及供电线路或施工条件限制，将同步协调相关单位处理并向群众反馈进展。',
-    ['核实具体位置和灯杆编号', '确认是否存在安全隐患', '安排养护单位现场检修', '反馈维修完成时间']
+    ['核实具体位置和灯杆编号', '确认是否存在安全隐患', '安排养护单位现场检修', '反馈维修完成时间'],
+    true,
+    68,
+    1
   ),
   createMockKnowledgeEntry(
     '公交站亭设施破损办理口径',
@@ -640,7 +650,10 @@ export const mockKnowledgeBaseEntries: KnowledgeBaseEntry[] = [
     ['公交站', '候车亭', '站牌', '座椅', '玻璃破损'],
     '交通委员会',
     '关于公交站亭设施问题，已转交养护责任单位核实处理。对破损玻璃、座椅或站牌信息异常等情况，将按设施维护流程组织维修，并加强站点巡检，保障市民候车安全和出行体验。',
-    ['确认站点名称和方向', '核对破损设施类型', '联系养护责任单位', '记录维修或更换结果']
+    ['确认站点名称和方向', '核对破损设施类型', '联系养护责任单位', '记录维修或更换结果'],
+    true,
+    42,
+    3
   ),
   createMockKnowledgeEntry(
     '物业服务投诉答复口径',
@@ -648,7 +661,10 @@ export const mockKnowledgeBaseEntries: KnowledgeBaseEntry[] = [
     ['物业', '电梯', '楼道卫生', '物业服务', '小区管理'],
     '住房和城乡建设委员会',
     '已将群众反映的物业服务问题转属地住建部门核查。将督促物业服务企业按照合同约定履行保洁、维修和秩序维护职责；对整改不到位的，依法依规纳入行业监管并跟踪整改情况。',
-    ['核实小区名称和物业公司', '区分公共区域保洁或设施维修问题', '督促物业限期整改', '保留整改前后材料']
+    ['核实小区名称和物业公司', '区分公共区域保洁或设施维修问题', '督促物业限期整改', '保留整改前后材料'],
+    true,
+    31,
+    5
   ),
   createMockKnowledgeEntry(
     '社保缴费查询办理口径',
@@ -656,7 +672,10 @@ export const mockKnowledgeBaseEntries: KnowledgeBaseEntry[] = [
     ['社保', '缴费', '查询不到', '记录', '社保电话'],
     '人力资源和社会保障局',
     '针对社保缴费记录查询问题，已转社保经办机构核实参保缴费信息。工作人员将根据群众提供的身份信息、缴费时间和参保单位进行核对，并通过电话或线上渠道反馈查询结果及后续办理方式。',
-    ['核实参保人基础信息', '确认缴费月份和参保单位', '排查系统同步或单位申报情况', '告知查询渠道和办理材料']
+    ['核实参保人基础信息', '确认缴费月份和参保单位', '排查系统同步或单位申报情况', '告知查询渠道和办理材料'],
+    true,
+    25,
+    7
   ),
   createMockKnowledgeEntry(
     '夜间施工噪音投诉办理口径',
@@ -664,7 +683,10 @@ export const mockKnowledgeBaseEntries: KnowledgeBaseEntry[] = [
     ['噪音', '噪声', '夜间施工', '扰民', '工地'],
     '生态环境局',
     '群众反映的夜间施工噪声问题已转生态环境执法部门核查。将结合施工许可、作业时段和现场噪声情况进行检查，对违规施工扰民行为依法处置，并督促施工单位优化作业安排。',
-    ['核实噪声发生时间和地点', '检查夜间施工许可情况', '开展现场或联合执法检查', '反馈处置措施和整改要求']
+    ['核实噪声发生时间和地点', '检查夜间施工许可情况', '开展现场或联合执法检查', '反馈处置措施和整改要求'],
+    true,
+    54,
+    2
   ),
   createMockKnowledgeEntry(
     '食品安全投诉答复口径',
@@ -672,7 +694,10 @@ export const mockKnowledgeBaseEntries: KnowledgeBaseEntry[] = [
     ['食品安全', '餐厅', '卫生', '变质', '过期'],
     '市场监督管理局',
     '已将食品安全相关问题转市场监管部门办理。执法人员将对被反映经营主体开展现场检查，重点核查食品原料、加工环境、票证留存和从业人员管理情况；发现违法违规行为的，将依法处理并反馈结果。',
-    ['核实经营主体名称和地址', '保留消费凭证或问题照片', '检查食品安全管理制度', '依法反馈检查处理结果']
+    ['核实经营主体名称和地址', '保留消费凭证或问题照片', '检查食品安全管理制度', '依法反馈检查处理结果'],
+    true,
+    18,
+    12
   ),
 ];
 
