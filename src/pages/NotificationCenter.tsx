@@ -15,6 +15,8 @@ import {
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { useTicketStore } from '@/store/useTicketStore';
 import {
+  DeadlineNotificationScope,
+  DeadlineRiskStage,
   NOTIFICATION_TYPE_LABELS,
   NotificationReadStatus,
   NotificationType,
@@ -54,6 +56,26 @@ const colorMap = {
   collaboration_complete: 'bg-green-100 text-green-700',
   result_submit: 'bg-blue-100 text-blue-700',
 };
+
+const riskStageMap: Record<DeadlineRiskStage, { label: string; className: string }> = {
+  overdue: { label: '已超期', className: 'bg-red-100 text-red-700' },
+  within_1_day: { label: '高风险', className: 'bg-orange-100 text-orange-700' },
+  within_3_days: { label: '中风险', className: 'bg-yellow-100 text-yellow-700' },
+};
+
+const deadlineScopeLabels: Record<DeadlineNotificationScope, string> = {
+  primary_handler: '主办单位',
+  primary_supervisor: '主办督办',
+  collaboration_handler: '协办单位',
+  collaboration_supervisor: '协办督办',
+};
+
+function formatRemainingWorkdays(days?: number) {
+  if (days === undefined) return '';
+  if (days < 0) return `超期${Math.abs(days)}个工作日`;
+  if (days === 0) return '今天到期';
+  return `剩余${days}个工作日`;
+}
 
 export default function NotificationCenter() {
   const navigate = useNavigate();
@@ -187,6 +209,14 @@ export default function NotificationCenter() {
                       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
                         {NOTIFICATION_TYPE_LABELS[notification.type]}
                       </span>
+                      {notification.type === 'deadline' && notification.riskStage && (
+                        <span className={clsx(
+                          'rounded-full px-2 py-0.5 text-xs font-medium',
+                          riskStageMap[notification.riskStage].className
+                        )}>
+                          {riskStageMap[notification.riskStage].label}
+                        </span>
+                      )}
                       <span className="text-xs text-gray-400">{notification.createTime}</span>
                     </div>
                     <p className="mt-2 text-sm font-semibold text-gray-900">{notification.title}</p>
@@ -194,6 +224,15 @@ export default function NotificationCenter() {
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
                       <span>工单编号：{notification.ticketId}</span>
                       <span>承办单位：{notification.handlerUnit}</span>
+                      {notification.type === 'deadline' && notification.deadlineScope && (
+                        <span>
+                          接收范围：{deadlineScopeLabels[notification.deadlineScope]}
+                          {notification.targetUnit ? `：${notification.targetUnit}` : ''}
+                        </span>
+                      )}
+                      {notification.type === 'deadline' && notification.remainingWorkdays !== undefined && (
+                        <span>时限状态：{formatRemainingWorkdays(notification.remainingWorkdays)}</span>
+                      )}
                       <span>操作人：{notification.operator}</span>
                     </div>
                   </div>

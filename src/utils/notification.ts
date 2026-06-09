@@ -1,4 +1,6 @@
 import {
+  DeadlineNotificationScope,
+  DeadlineRiskStage,
   HandlerUnit,
   NotificationRecipientRole,
   NotificationType,
@@ -15,6 +17,11 @@ interface NotificationInput {
   operator: string;
   recipientRole: NotificationRecipientRole;
   recipientUnit?: HandlerUnit;
+  targetUnit?: HandlerUnit;
+  riskStage?: DeadlineRiskStage;
+  deadlineScope?: DeadlineNotificationScope;
+  remainingWorkdays?: number;
+  dedupKey?: string;
   createTime?: string;
 }
 
@@ -29,6 +36,11 @@ export function createNotification(input: NotificationInput): SupervisionNotific
     handlerUnit: input.ticket.handlerUnit,
     recipientRole: input.recipientRole,
     recipientUnit: input.recipientUnit,
+    targetUnit: input.targetUnit,
+    riskStage: input.riskStage,
+    deadlineScope: input.deadlineScope,
+    remainingWorkdays: input.remainingWorkdays,
+    dedupKey: input.dedupKey,
     operator: input.operator,
     createTime: input.createTime || formatDateTime(new Date()),
     isRead: false,

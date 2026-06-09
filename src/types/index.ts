@@ -180,6 +180,14 @@ export type NotificationReadStatus = 'all' | 'unread' | 'read';
 
 export type NotificationRecipientRole = 'supervisor' | 'handler' | 'all';
 
+export type DeadlineRiskStage = 'overdue' | 'within_1_day' | 'within_3_days';
+
+export type DeadlineNotificationScope =
+  | 'primary_handler'
+  | 'primary_supervisor'
+  | 'collaboration_handler'
+  | 'collaboration_supervisor';
+
 export interface SupervisionNotification {
   id: string;
   type: NotificationType;
@@ -190,6 +198,11 @@ export interface SupervisionNotification {
   handlerUnit: HandlerUnit;
   recipientRole: NotificationRecipientRole;
   recipientUnit?: HandlerUnit;
+  targetUnit?: HandlerUnit;
+  riskStage?: DeadlineRiskStage;
+  deadlineScope?: DeadlineNotificationScope;
+  remainingWorkdays?: number;
+  dedupKey?: string;
   operator: string;
   createTime: string;
   isRead: boolean;
