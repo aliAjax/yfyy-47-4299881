@@ -285,12 +285,6 @@ export default function DispatchRules() {
     setHasTrialRun(false);
   };
 
-  const getScoreColor = (score: number) => {
-    if (score >= 60) return 'text-green-600';
-    if (score >= 30) return 'text-amber-600';
-    return 'text-gray-500';
-  };
-
   const getScoreBadgeClass = (score: number) => {
     if (score >= 60) return 'bg-green-100 text-green-700';
     if (score >= 30) return 'bg-amber-100 text-amber-700';
