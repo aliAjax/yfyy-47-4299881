@@ -36,6 +36,7 @@ interface TicketState {
   resetFilters: () => void;
   setArchiveFilterOptions: (options: Partial<ArchiveFilterOptions>) => void;
   resetArchiveFilters: () => void;
+  refreshDeadlineCalculations: () => void;
 
   getTicketById: (id: string) => Ticket | undefined;
   getFilteredTickets: () => Ticket[];
@@ -180,6 +181,12 @@ export const useTicketStore = create<TicketState>()(
       })),
 
       resetArchiveFilters: () => set({ archiveFilterOptions: initialArchiveFilterOptions }),
+
+      refreshDeadlineCalculations: () => {
+        set((state) => ({
+          tickets: [...state.tickets],
+        }));
+      },
 
       getTicketById: (id) => {
         return get().tickets.find(t => t.id === id);

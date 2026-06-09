@@ -1,4 +1,5 @@
 import { formatDate } from './date';
+import type { HolidayConfig, RiskLevel, Ticket } from '@/types';
 
 const DEFAULT_HOLIDAYS: string[] = [];
 const DEFAULT_WORKDAYS: string[] = [];
@@ -146,4 +147,111 @@ export function calculateDeadlineWorkdays(
 ): string {
   const deadline = addWorkdays(assignDate, deadlineDays, holidayDates, workdayDates);
   return formatDate(deadline);
+}
+
+export interface HolidayImpactItem {
+  ticketId: string;
+  title: string;
+  handlerUnit: string;
+  status: string;
+  deadline: string;
+  beforeRemaining: number;
+  afterRemaining: number;
+  beforeRiskLevel: RiskLevel;
+  afterRiskLevel: RiskLevel;
+  beforeOverdue: boolean;
+  afterOverdue: boolean;
+  remainingChanged: boolean;
+  riskChanged: boolean;
+  overdueChanged: boolean;
+}
+
+export interface HolidayImpactPreview {
+  items: HolidayImpactItem[];
+  changedCount: number;
+  remainingChangedCount: number;
+  riskChangedCount: number;
+  overdueChangedCount: number;
+  newOverdueCount: number;
+  riskRaisedCount: number;
+  requiresConfirmation: boolean;
+}
+
+function getHolidayDatesByType(holidays: HolidayConfig[], type: HolidayConfig['type']) {
+  return holidays.filter(holiday => holiday.type === type).map(holiday => holiday.date);
+}
+
+function getRiskLevelFromRemaining(remaining: number, status: string): RiskLevel {
+  if (remaining < 0 || status === 'overdue') return 'high';
+  if (remaining <= 1) return 'high';
+  if (remaining <= 3) return 'medium';
+  return 'low';
+}
+
+function getRiskRank(riskLevel: RiskLevel) {
+  if (riskLevel === 'high') return 3;
+  if (riskLevel === 'medium') return 2;
+  return 1;
+}
+
+export function calculateHolidayImpactPreview(
+  tickets: Ticket[],
+  currentHolidays: HolidayConfig[],
+  nextHolidays: HolidayConfig[],
+  now: Date = new Date()
+): HolidayImpactPreview {
+  const currentHolidayDates = getHolidayDatesByType(currentHolidays, 'holiday');
+  const currentWorkdayDates = getHolidayDatesByType(currentHolidays, 'workday');
+  const nextHolidayDates = getHolidayDatesByType(nextHolidays, 'holiday');
+  const nextWorkdayDates = getHolidayDatesByType(nextHolidays, 'workday');
+
+  const items = tickets
+    .filter(ticket => ticket.status !== 'completed' && ticket.status !== 'archived')
+    .map(ticket => {
+      const beforeRemaining = getWorkdaysRemaining(ticket.deadline, now, currentHolidayDates, currentWorkdayDates);
+      const afterRemaining = getWorkdaysRemaining(ticket.deadline, now, nextHolidayDates, nextWorkdayDates);
+      const beforeRiskLevel = getRiskLevelFromRemaining(beforeRemaining, ticket.status);
+      const afterRiskLevel = getRiskLevelFromRemaining(afterRemaining, ticket.status);
+      const beforeOverdue = beforeRemaining < 0 || ticket.status === 'overdue';
+      const afterOverdue = afterRemaining < 0 || ticket.status === 'overdue';
+
+      return {
+        ticketId: ticket.id,
+        title: ticket.title,
+        handlerUnit: ticket.handlerUnit,
+        status: ticket.status,
+        deadline: ticket.deadline,
+        beforeRemaining,
+        afterRemaining,
+        beforeRiskLevel,
+        afterRiskLevel,
+        beforeOverdue,
+        afterOverdue,
+        remainingChanged: beforeRemaining !== afterRemaining,
+        riskChanged: beforeRiskLevel !== afterRiskLevel,
+        overdueChanged: beforeOverdue !== afterOverdue,
+      };
+    })
+    .filter(item => item.remainingChanged || item.riskChanged || item.overdueChanged)
+    .sort((a, b) => {
+      const riskDelta = getRiskRank(b.afterRiskLevel) - getRiskRank(a.afterRiskLevel);
+      if (riskDelta !== 0) return riskDelta;
+      return a.afterRemaining - b.afterRemaining;
+    });
+
+  const riskRaisedCount = items.filter(
+    item => getRiskRank(item.afterRiskLevel) > getRiskRank(item.beforeRiskLevel)
+  ).length;
+  const newOverdueCount = items.filter(item => !item.beforeOverdue && item.afterOverdue).length;
+
+  return {
+    items,
+    changedCount: items.length,
+    remainingChangedCount: items.filter(item => item.remainingChanged).length,
+    riskChangedCount: items.filter(item => item.riskChanged).length,
+    overdueChangedCount: items.filter(item => item.overdueChanged).length,
+    newOverdueCount,
+    riskRaisedCount,
+    requiresConfirmation: newOverdueCount > 0 || riskRaisedCount > 0,
+  };
 }

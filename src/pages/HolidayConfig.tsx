@@ -11,16 +11,38 @@ import {
   Filter,
   CalendarClock,
   Sun,
-  Briefcase
+  Briefcase,
+  AlertTriangle,
+  CheckCircle
 } from 'lucide-react';
 import { useHolidayStore } from '@/store/useHolidayStore';
-import type { HolidayType } from '@/types';
+import { useTicketStore } from '@/store/useTicketStore';
+import { useNotificationStore } from '@/store/useNotificationStore';
+import { mockHolidays } from '@/data/mockData';
+import type { HolidayConfig as HolidayConfigType, HolidayType } from '@/types';
+import {
+  calculateHolidayImpactPreview,
+  type HolidayImpactPreview,
+} from '@/utils/workday';
 import { clsx } from 'clsx';
 
 interface HolidayFormData {
   date: string;
   name: string;
   type: HolidayType;
+}
+
+type HolidayAction =
+  | { type: 'add'; data: HolidayFormData & { year: number } }
+  | { type: 'edit'; id: string; data: HolidayFormData & { year: number } }
+  | { type: 'delete'; id: string }
+  | { type: 'reset' };
+
+interface PendingHolidayChange {
+  action: HolidayAction;
+  title: string;
+  description: string;
+  preview: HolidayImpactPreview;
 }
 
 const initialFormData: HolidayFormData = {
@@ -31,6 +53,9 @@ const initialFormData: HolidayFormData = {
 
 export default function HolidayConfig() {
   const { holidays, addHoliday, updateHoliday, deleteHoliday, resetHolidays } = useHolidayStore();
+  const tickets = useTicketStore(state => state.tickets);
+  const refreshDeadlineCalculations = useTicketStore(state => state.refreshDeadlineCalculations);
+  const refreshDeadlineNotifications = useNotificationStore(state => state.refreshDeadlineNotifications);
 
   const [searchText, setSearchText] = useState('');
   const [filterType, setFilterType] = useState<HolidayType | ''>('');
@@ -39,6 +64,7 @@ export default function HolidayConfig() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<HolidayFormData>(initialFormData);
   const [formErrors, setFormErrors] = useState<string[]>([]);
+  const [pendingChange, setPendingChange] = useState<PendingHolidayChange | null>(null);
 
   const years = useMemo(() => {
     const yearSet = new Set(holidays.map(h => h.year));
@@ -89,6 +115,60 @@ export default function HolidayConfig() {
     setFormErrors([]);
   };
 
+  const getNextHolidays = (action: HolidayAction): HolidayConfigType[] => {
+    if (action.type === 'add') {
+      return [
+        {
+          ...action.data,
+          id: 'preview-holiday',
+          createTime: '',
+          updateTime: '',
+        },
+        ...holidays,
+      ];
+    }
+
+    if (action.type === 'edit') {
+      return holidays.map(holiday =>
+        holiday.id === action.id ? { ...holiday, ...action.data } : holiday
+      );
+    }
+
+    if (action.type === 'delete') {
+      return holidays.filter(holiday => holiday.id !== action.id);
+    }
+
+    return mockHolidays;
+  };
+
+  const openImpactPreview = (action: HolidayAction, title: string, description: string) => {
+    const preview = calculateHolidayImpactPreview(tickets, holidays, getNextHolidays(action));
+    setPendingChange({ action, title, description, preview });
+  };
+
+  const getFormValidationErrors = (year: number) => {
+    const errors: string[] = [];
+    if (!formData.date) {
+      errors.push('请选择日期');
+    }
+    if (!formData.name.trim()) {
+      errors.push('请输入节假日名称');
+    }
+    if (!formData.type) {
+      errors.push('请选择类型');
+    }
+    if (Number.isNaN(year)) {
+      errors.push('日期格式不正确');
+    }
+    const duplicate = holidays.find(holiday =>
+      holiday.date === formData.date && holiday.id !== editingId
+    );
+    if (duplicate) {
+      errors.push('该日期已存在配置');
+    }
+    return errors;
+  };
+
   const handleFormChange = (field: keyof HolidayFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (formErrors.length > 0) {
@@ -98,39 +178,78 @@ export default function HolidayConfig() {
 
   const handleSubmit = () => {
     const year = formData.date ? parseInt(formData.date.split('-')[0]) : new Date().getFullYear();
+    const errors = getFormValidationErrors(year);
+    if (errors.length > 0) {
+      setFormErrors(errors);
+      return;
+    }
 
     if (editingId) {
-      const result = updateHoliday(editingId, {
-        ...formData,
-        year,
-      });
-      if (!result.success) {
-        setFormErrors(result.errors);
-        return;
-      }
+      openImpactPreview(
+        { type: 'edit', id: editingId, data: { ...formData, year } },
+        '确认修改节假日配置',
+        `${formData.date} 将按“${formData.name}（${getTypeLabel(formData.type)}）”重新参与工单期限计算。`
+      );
     } else {
-      const result = addHoliday({
-        ...formData,
-        year,
-      });
-      if (!result.success) {
-        setFormErrors(result.errors);
-        return;
-      }
+      openImpactPreview(
+        { type: 'add', data: { ...formData, year } },
+        '确认添加节假日配置',
+        `${formData.date} 将作为“${formData.name}（${getTypeLabel(formData.type)}）”参与工单期限计算。`
+      );
     }
-    handleClose();
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('确定要删除这条节假日配置吗？')) {
-      deleteHoliday(id);
-    }
+    const holiday = holidays.find(item => item.id === id);
+    if (!holiday) return;
+    openImpactPreview(
+      { type: 'delete', id },
+      '确认删除节假日配置',
+      `${holiday.date} ${holiday.name}（${getTypeLabel(holiday.type)}）将不再参与工单期限计算。`
+    );
   };
 
   const handleReset = () => {
-    if (confirm('确定要重置为默认节假日配置吗？所有自定义配置将丢失。')) {
+    openImpactPreview(
+      { type: 'reset' },
+      '确认重置默认节假日',
+      '所有自定义节假日配置将被默认配置替换，并重新影响未办结工单期限计算。'
+    );
+  };
+
+  const handleCancelPreview = () => {
+    setPendingChange(null);
+  };
+
+  const handleConfirmPreview = () => {
+    if (!pendingChange) return;
+
+    let result: { success: boolean; errors: string[] } = { success: true, errors: [] };
+    const { action } = pendingChange;
+
+    if (action.type === 'add') {
+      result = addHoliday(action.data);
+    } else if (action.type === 'edit') {
+      result = updateHoliday(action.id, action.data);
+    } else if (action.type === 'delete') {
+      deleteHoliday(action.id);
+    } else {
       resetHolidays();
     }
+
+    if (!result.success) {
+      setFormErrors(result.errors);
+      setPendingChange(null);
+      if (action.type !== 'delete' && action.type !== 'reset') {
+        setShowModal(true);
+      }
+      return;
+    }
+
+    refreshDeadlineCalculations();
+    refreshDeadlineNotifications(tickets);
+    setPendingChange(null);
+    handleClose();
   };
 
   const getTypeLabel = (type: HolidayType) => {
@@ -141,6 +260,18 @@ export default function HolidayConfig() {
     return type === 'holiday'
       ? 'bg-red-100 text-red-700'
       : 'bg-blue-100 text-blue-700';
+  };
+
+  const getRiskLabel = (risk: 'high' | 'medium' | 'low') => {
+    if (risk === 'high') return '高风险';
+    if (risk === 'medium') return '中风险';
+    return '低风险';
+  };
+
+  const formatRemaining = (days: number) => {
+    if (days < 0) return `超期${Math.abs(days)}个工作日`;
+    if (days === 0) return '今天到期';
+    return `剩余${days}个工作日`;
   };
 
   return (
@@ -431,6 +562,142 @@ export default function HolidayConfig() {
               >
                 <Save className="h-4 w-4" />
                 <span>保存</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingChange && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-xl bg-white shadow-xl">
+            <div className="flex items-start justify-between border-b border-gray-200 px-6 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{pendingChange.title}</h3>
+                <p className="mt-1 text-sm text-gray-500">{pendingChange.description}</p>
+              </div>
+              <button
+                onClick={handleCancelPreview}
+                className="p-1 text-gray-400 transition-colors hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-6">
+              <div className={clsx(
+                'mb-4 rounded-lg border p-4',
+                pendingChange.preview.requiresConfirmation
+                  ? 'border-amber-200 bg-amber-50'
+                  : 'border-green-200 bg-green-50'
+              )}>
+                <div className="flex items-start gap-3">
+                  {pendingChange.preview.requiresConfirmation ? (
+                    <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+                  ) : (
+                    <CheckCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600" />
+                  )}
+                  <div>
+                    <p className={clsx(
+                      'text-sm font-medium',
+                      pendingChange.preview.requiresConfirmation ? 'text-amber-800' : 'text-green-800'
+                    )}>
+                      {pendingChange.preview.changedCount > 0
+                        ? `将影响${pendingChange.preview.changedCount}个未办结工单`
+                        : '未发现未办结工单期限或风险变化'}
+                    </p>
+                    <p className={clsx(
+                      'mt-1 text-sm',
+                      pendingChange.preview.requiresConfirmation ? 'text-amber-700' : 'text-green-700'
+                    )}>
+                      剩余工作日变化{pendingChange.preview.remainingChangedCount}个，风险等级变化{pendingChange.preview.riskChangedCount}个，超期状态变化{pendingChange.preview.overdueChangedCount}个
+                      {pendingChange.preview.requiresConfirmation
+                        ? `，其中新增超期${pendingChange.preview.newOverdueCount}个、风险升高${pendingChange.preview.riskRaisedCount}个。`
+                        : '。'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {pendingChange.preview.items.length > 0 ? (
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50">
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">工单</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">办理单位</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">剩余工作日</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">风险等级</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">超期状态</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {pendingChange.preview.items.map(item => (
+                          <tr key={item.ticketId} className="bg-white">
+                            <td className="px-4 py-3">
+                              <p className="text-sm font-medium text-gray-900">{item.ticketId}</p>
+                              <p className="mt-0.5 max-w-xs truncate text-xs text-gray-500" title={item.title}>{item.title}</p>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{item.handlerUnit}</td>
+                            <td className="px-4 py-3 text-sm">
+                              <span className={clsx(item.remainingChanged ? 'font-medium text-primary-700' : 'text-gray-600')}>
+                                {formatRemaining(item.beforeRemaining)}
+                              </span>
+                              <span className="mx-2 text-gray-400">→</span>
+                              <span className={clsx(item.remainingChanged ? 'font-medium text-primary-700' : 'text-gray-600')}>
+                                {formatRemaining(item.afterRemaining)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              <span className={clsx(item.riskChanged ? 'font-medium text-orange-700' : 'text-gray-600')}>
+                                {getRiskLabel(item.beforeRiskLevel)}
+                              </span>
+                              <span className="mx-2 text-gray-400">→</span>
+                              <span className={clsx(item.riskChanged ? 'font-medium text-orange-700' : 'text-gray-600')}>
+                                {getRiskLabel(item.afterRiskLevel)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              <span className={clsx(item.overdueChanged ? 'font-medium text-red-700' : 'text-gray-600')}>
+                                {item.beforeOverdue ? '已超期' : '未超期'}
+                              </span>
+                              <span className="mx-2 text-gray-400">→</span>
+                              <span className={clsx(item.overdueChanged ? 'font-medium text-red-700' : 'text-gray-600')}>
+                                {item.afterOverdue ? '已超期' : '未超期'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+                  本次配置变更不会改变未办结工单的剩余工作日、风险等级或超期状态。
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
+              <button
+                onClick={handleCancelPreview}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                返回修改
+              </button>
+              <button
+                onClick={handleConfirmPreview}
+                className={clsx(
+                  'inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors',
+                  pendingChange.preview.requiresConfirmation
+                    ? 'bg-amber-600 hover:bg-amber-700'
+                    : 'bg-primary-600 hover:bg-primary-700'
+                )}
+              >
+                <Save className="h-4 w-4" />
+                <span>确认保存并刷新</span>
               </button>
             </div>
           </div>

@@ -35,6 +35,7 @@ interface NotificationState {
   getVisibleNotifications: (role: 'handler' | 'supervisor', unit?: string) => SupervisionNotification[];
   getUnreadCount: (role: 'handler' | 'supervisor', unit?: string) => number;
   syncDeadlineNotifications: (tickets: Ticket[]) => void;
+  refreshDeadlineNotifications: (tickets: Ticket[]) => void;
 }
 
 const initialFilters: NotificationFilters = {
@@ -344,6 +345,24 @@ export const useNotificationStore = create<NotificationState>()(
           notifications: sortByCreateTime([...newNotifications, ...state.notifications]),
           deadlineNotifiedKeys: Array.from(notified).filter(keepActiveDeadlineKey),
         }));
+      },
+
+      refreshDeadlineNotifications: (tickets) => {
+        const activeTicketIds = new Set(
+          tickets
+            .filter(ticket => ticket.status !== 'completed' && ticket.status !== 'archived')
+            .map(ticket => ticket.id)
+        );
+
+        set((state) => ({
+          notifications: state.notifications.filter(notification =>
+            notification.type !== 'deadline' || !activeTicketIds.has(notification.ticketId)
+          ),
+          deadlineNotifiedKeys: [],
+          deadlineNotifiedTicketIds: [],
+        }));
+
+        get().syncDeadlineNotifications(tickets);
       },
     }),
     {
